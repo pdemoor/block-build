@@ -169,26 +169,44 @@ function SwipeHandler({ swipeRef, orbitRef, onFreeBlock }) {
 }
 
 function StarField() {
-  const geo = useMemo(() => {
-    const g = new THREE.BufferGeometry()
-    const pos = new Float32Array(300 * 3)
-    for (let i = 0; i < 300; i++) {
-      const u = Math.random()                      // cos of polar angle → 0=horizon,1=zenith
-      const phi = Math.random() * Math.PI * 2
-      const sinT = Math.sqrt(1 - u * u)
-      const r = 80 + Math.random() * 20
-      pos[i * 3]     = r * sinT * Math.cos(phi)
-      pos[i * 3 + 1] = r * u + 4                  // keep above floor
-      pos[i * 3 + 2] = r * sinT * Math.sin(phi)
+  const { geoFar, geoNear } = useMemo(() => {
+    const mkGeo = (count, rMin, rMax, yOff) => {
+      const g = new THREE.BufferGeometry()
+      const pos = new Float32Array(count * 3)
+      for (let i = 0; i < count; i++) {
+        const u = Math.random()
+        const phi = Math.random() * Math.PI * 2
+        const sinT = Math.sqrt(1 - u * u)
+        const r = rMin + Math.random() * (rMax - rMin)
+        pos[i * 3]     = r * sinT * Math.cos(phi)
+        pos[i * 3 + 1] = r * u + yOff
+        pos[i * 3 + 2] = r * sinT * Math.sin(phi)
+      }
+      g.setAttribute('position', new THREE.BufferAttribute(pos, 3))
+      return g
     }
-    g.setAttribute('position', new THREE.BufferAttribute(pos, 3))
-    return g
+    return { geoFar: mkGeo(340, 85, 105, 4), geoNear: mkGeo(65, 68, 85, 5) }
   }, [])
   return (
-    <points geometry={geo}>
-      <pointsMaterial size={0.15} color="#8ab0e8" transparent opacity={0.5} sizeAttenuation depthWrite={false} />
-    </points>
+    <>
+      <points geometry={geoFar}>
+        <pointsMaterial size={0.09} color="#7aaee6" transparent opacity={0.32} sizeAttenuation depthWrite={false} />
+      </points>
+      <points geometry={geoNear}>
+        <pointsMaterial size={0.22} color="#cce8ff" transparent opacity={0.58} sizeAttenuation depthWrite={false} />
+      </points>
+    </>
   )
+}
+
+// Slow overhead breathing light — very subtle living-world feel
+function BreathingLight() {
+  const ref = useRef(null)
+  useFrame(({ clock }) => {
+    if (!ref.current) return
+    ref.current.intensity = 0.12 + Math.sin(clock.getElapsedTime() * 0.32) * 0.04
+  })
+  return <pointLight ref={ref} position={[2, 20, 3]} color="#1c3a6a" intensity={0.12} />
 }
 
 export default function Scene({ blocks, knockKey, onPlace, orbitRef, antiGravity, placeHeight, color, onFreeBlock }) {
@@ -198,6 +216,7 @@ export default function Scene({ blocks, knockKey, onPlace, orbitRef, antiGravity
   return (
     <>
       <StarField />
+      <BreathingLight />
       <Shockwave knockKey={knockKey} />
       <SwipeHandler swipeRef={swipeRef} orbitRef={orbitRef} onFreeBlock={onFreeBlock} />
       <Floor
@@ -261,9 +280,12 @@ function Floor({ onPlace, antiGravity, placeHeight, color, ghostGrid, setGhostGr
           }}
         >
           <boxGeometry args={[GRID, 0.2, GRID]} />
-          <meshStandardMaterial color="#0b1624" roughness={0.92} metalness={0.18} emissive="#050a12" emissiveIntensity={0.3} transparent opacity={0.72} depthWrite={false} />
+          <meshStandardMaterial color="#080f1c" roughness={0.88} metalness={0.30} emissive="#030609" emissiveIntensity={0.18} />
         </mesh>
-        <gridHelper args={[GRID, GRID, '#1c3254', '#0d1a2c']} position={[0, 0.01, 0]} />
+        {/* Fine 1-unit grid — very subtle */}
+        <gridHelper args={[GRID, GRID, '#0d1e32', '#08121e']} position={[0, 0.01, 0]} />
+        {/* Major 4-unit grid — slightly brighter for orientation */}
+        <gridHelper args={[GRID, 6, '#18304e', '#18304e']} position={[0, 0.013, 0]} />
       </RigidBody>
 
       {antiGravity && ghostGrid && (

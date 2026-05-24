@@ -267,22 +267,23 @@ export default function App() {
       `}</style>
 
       <Canvas
-        shadows
+        shadows="soft"
         camera={{ position: [8, 8, 12], fov: 50, near: 0.1, far: 200 }}
         gl={{ antialias: true, powerPreference: 'high-performance' }}
-        style={{ background: 'linear-gradient(to bottom, #080e1c 0%, #0c1530 55%, #080e1c 100%)', touchAction: 'none' }}
+        style={{ background: 'linear-gradient(180deg, #020610 0%, #050c1c 28%, #071228 58%, #050c1c 84%, #020407 100%)', touchAction: 'none' }}
         onCreated={({ gl }) => { gl.domElement.style.touchAction = 'none' }}
       >
-        <fog attach="fog" args={['#080e1c', 72, 130]} />
-        <ambientLight intensity={0.38} />
-        <hemisphereLight args={['#1e3a6e', '#080c18', 0.55]} />
+        <fog attach="fog" args={['#060b18', 58, 100]} />
+        <ambientLight intensity={0.32} />
+        <hemisphereLight args={['#162e5c', '#05090f', 0.52]} />
         <directionalLight
-          position={[8, 14, 6]} intensity={0.95} castShadow
+          position={[8, 14, 6]} intensity={0.82} castShadow
           shadow-mapSize={[1024, 1024]}
           shadow-camera-near={0.1} shadow-camera-far={60}
-          shadow-camera-left={-14} shadow-camera-right={14}
-          shadow-camera-top={14} shadow-camera-bottom={-14}
+          shadow-camera-left={-16} shadow-camera-right={16}
+          shadow-camera-top={16} shadow-camera-bottom={-16}
         />
+        <pointLight position={[-6, 8, -10]} intensity={0.28} color="#1a3268" />
         <Physics key={physicsKey} gravity={[0, -20, 0]}>
           <Scene
             blocks={blocks}
@@ -309,7 +310,7 @@ export default function App() {
       {/* Vignette overlay */}
       <div style={{
         position: 'absolute', inset: 0, pointerEvents: 'none',
-        background: 'radial-gradient(ellipse at 50% 38%, transparent 48%, rgba(4,6,14,0.62) 100%)',
+        background: 'radial-gradient(ellipse at 50% 36%, transparent 42%, rgba(3,5,12,0.55) 70%, rgba(2,4,10,0.78) 100%)',
       }} />
 
       {/* Header */}
