@@ -3,6 +3,7 @@ import { Canvas } from '@react-three/fiber'
 import { OrbitControls, Environment } from '@react-three/drei'
 import { Physics } from '@react-three/rapier'
 import Scene from './Scene'
+import { sound, playPlace, playKnock, playTap, playFloatOn, playFloatOff } from './sounds'
 
 const PALETTE = [
   '#e74c3c', '#e67e22', '#FFE600', '#2ecc71',   // 0-3  red, orange, neon-yellow, green
@@ -124,6 +125,10 @@ export default function App() {
   const [placeHeight, setPlaceHeight] = useState(0)
   const [toast, setToast] = useState(null)
   const [isPhotoMode, setIsPhotoMode] = useState(false)
+  const [muted, setMuted] = useState(false)
+
+  // Keep module-level sound state in sync on every render
+  sound.muted = muted
 
   // Refs so callbacks always see current values
   const colorRef = useRef(color)
@@ -164,6 +169,7 @@ export default function App() {
   }
 
   const placeBlock = useCallback((gridX, gridZ) => {
+    playPlace()
     pushHistory(blocksRef.current, 'place')
     const isAG = antiGravityRef.current
     const height = placeHeightRef.current
@@ -189,6 +195,7 @@ export default function App() {
   }, [])
 
   const knockDown = useCallback(() => {
+    playKnock()
     pushHistory(blocksRef.current, 'knock')
     setBlocks(prev => prev.map(b => b.isFixed ? { ...b, isFixed: false } : b))
     setKnockKey(k => k + 1)
@@ -280,10 +287,13 @@ export default function App() {
 
   const toggleAntiGravity = useCallback(() => {
     setAntiGravity(v => {
-      if (v) setPlaceHeight(0)
+      if (v) { setPlaceHeight(0); playFloatOff() }
+      else playFloatOn()
       return !v
     })
   }, [])
+
+  const toggleMute = useCallback(() => setMuted(m => !m), [])
 
   const saveNames = Object.keys(saves)
   // Panel height (px, excluding safe-area) for positioning toast and modals above panel
@@ -370,18 +380,35 @@ export default function App() {
           alt="Block Build"
           style={{ width: 'clamp(56px, 11vw, 96px)', height: 'auto', filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.7))' }}
         />
-        {blocks.length > 0 && (
-          <span style={{
-            background: 'rgba(255,255,255,0.08)',
-            backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
-            border: '1px solid rgba(255,255,255,0.14)',
-            color: 'rgba(255,255,255,0.88)',
-            fontSize: 12, fontWeight: 700,
-            padding: '4px 11px', borderRadius: 20, letterSpacing: 0.3,
-          }}>
-            {blocks.length} block{blocks.length !== 1 ? 's' : ''}
-          </span>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button
+            onPointerDown={toggleMute}
+            title={muted ? 'Unmute' : 'Mute'}
+            style={{
+              width: 30, height: 30, borderRadius: '50%',
+              background: 'rgba(255,255,255,0.08)',
+              backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+              border: '1px solid rgba(255,255,255,0.14)',
+              color: 'rgba(255,255,255,0.88)',
+              fontSize: 14, lineHeight: 1, padding: 0, flexShrink: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer', pointerEvents: 'all',
+              WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation',
+            }}
+          >{muted ? '🔇' : '🔊'}</button>
+          {blocks.length > 0 && (
+            <span style={{
+              background: 'rgba(255,255,255,0.08)',
+              backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+              border: '1px solid rgba(255,255,255,0.14)',
+              color: 'rgba(255,255,255,0.88)',
+              fontSize: 12, fontWeight: 700,
+              padding: '4px 11px', borderRadius: 20, letterSpacing: 0.3,
+            }}>
+              {blocks.length} block{blocks.length !== 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
       </header>
 
       {blocks.length === 0 && !antiGravity && !isPhotoMode && (
@@ -666,7 +693,7 @@ function Btn({ bg, onTap, disabled, children }) {
   return (
     <button
       className="bb-btn"
-      onPointerDown={disabled ? undefined : onTap}
+      onPointerDown={disabled ? undefined : () => { playTap(); onTap() }}
       style={{
         flex: 1, height: 40,
         background: disabled ? 'rgba(30,30,46,0.6)' : bg,
@@ -700,7 +727,7 @@ function CtrlBtn({ emoji, label, onTap, disabled, active, activeColor, activeGlo
   return (
     <button
       className="bb-btn"
-      onPointerDown={disabled ? undefined : onTap}
+      onPointerDown={disabled ? undefined : () => { playTap(); onTap() }}
       style={{
         flex: 1, height: 44, minWidth: 0, padding: 0,
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2,
