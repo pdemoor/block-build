@@ -8,6 +8,75 @@ const HALF = GRID / 2
 const BOX_GEO = new THREE.BoxGeometry(1, 1, 1)
 const EDGES_GEO = new THREE.EdgesGeometry(BOX_GEO)
 
+// Pulsing ghost preview shown in float mode
+function GhostBlock({ x, z, placeHeight, color }) {
+  const matRef = useRef(null)
+  useFrame(({ clock }) => {
+    if (!matRef.current) return
+    matRef.current.opacity = 0.28 + Math.sin(clock.getElapsedTime() * 3.5) * 0.10
+  })
+  return (
+    <>
+      <mesh position={[x + 0.5, placeHeight + 0.5, z + 0.5]} geometry={BOX_GEO} raycast={() => null}>
+        <meshStandardMaterial ref={matRef} color={color} emissive={color} emissiveIntensity={0.22} transparent opacity={0.28} depthWrite={false} />
+      </mesh>
+      {placeHeight > 0 && (
+        <mesh position={[x + 0.5, placeHeight / 2, z + 0.5]} raycast={() => null}>
+          <boxGeometry args={[0.05, placeHeight, 0.05]} />
+          <meshBasicMaterial color={color} transparent opacity={0.2} />
+        </mesh>
+      )}
+    </>
+  )
+}
+
+// Gentle pulsing glow for fixed (floating) blocks
+function FixedBlockMaterial({ color }) {
+  const ref = useRef(null)
+  useFrame(({ clock }) => {
+    if (!ref.current) return
+    ref.current.emissiveIntensity = 0.06 + Math.sin(clock.getElapsedTime() * 2.3) * 0.04
+  })
+  return <meshStandardMaterial ref={ref} color={color} roughness={0.25} metalness={0.0} emissive={color} emissiveIntensity={0.06} />
+}
+
+// Expanding ring shockwave on knock
+function Shockwave({ knockKey }) {
+  const meshRef = useRef(null)
+  const matRef = useRef(null)
+  const { clock } = useThree()
+  const startRef = useRef(null)
+  const prevKey = useRef(knockKey)
+
+  useEffect(() => {
+    if (knockKey !== prevKey.current) {
+      prevKey.current = knockKey
+      startRef.current = clock.getElapsedTime()
+    }
+  }, [knockKey, clock])
+
+  useFrame(() => {
+    if (!meshRef.current || !matRef.current || startRef.current === null) return
+    const age = clock.getElapsedTime() - startRef.current
+    if (age > 0.65) {
+      meshRef.current.scale.setScalar(0.001)
+      matRef.current.opacity = 0
+      startRef.current = null
+      return
+    }
+    const t = age / 0.65
+    meshRef.current.scale.setScalar(t * 15)
+    matRef.current.opacity = (1 - t) * 0.42
+  })
+
+  return (
+    <mesh ref={meshRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.06, 0]} scale={0.001}>
+      <ringGeometry args={[0.8, 1, 36]} />
+      <meshBasicMaterial ref={matRef} color="#ff6040" transparent opacity={0} depthWrite={false} side={THREE.DoubleSide} />
+    </mesh>
+  )
+}
+
 function useTap(onTap) {
   const pd = useRef(null)
   return {
@@ -129,6 +198,7 @@ export default function Scene({ blocks, knockKey, onPlace, orbitRef, antiGravity
   return (
     <>
       <StarField />
+      <Shockwave knockKey={knockKey} />
       <SwipeHandler swipeRef={swipeRef} orbitRef={orbitRef} onFreeBlock={onFreeBlock} />
       <Floor
         onPlace={onPlace}
@@ -196,26 +266,8 @@ function Floor({ onPlace, antiGravity, placeHeight, color, ghostGrid, setGhostGr
         <gridHelper args={[GRID, GRID, '#1c3254', '#0d1a2c']} position={[0, 0.01, 0]} />
       </RigidBody>
 
-      {/* Ghost block preview — ghostGrid stores cell indices; world center = index + 0.5 */}
       {antiGravity && ghostGrid && (
-        <>
-          <mesh
-            position={[ghostGrid.x + 0.5, placeHeight + 0.5, ghostGrid.z + 0.5]}
-            geometry={BOX_GEO}
-            raycast={() => null}
-          >
-            <meshStandardMaterial color={color} transparent opacity={0.4} depthWrite={false} />
-          </mesh>
-          {placeHeight > 0 && (
-            <mesh
-              position={[ghostGrid.x + 0.5, placeHeight / 2, ghostGrid.z + 0.5]}
-              raycast={() => null}
-            >
-              <boxGeometry args={[0.05, placeHeight, 0.05]} />
-              <meshBasicMaterial color={color} transparent opacity={0.2} />
-            </mesh>
-          )}
-        </>
+        <GhostBlock x={ghostGrid.x} z={ghostGrid.z} placeHeight={placeHeight} color={color} />
       )}
     </>
   )
@@ -248,17 +300,28 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
   const rb = useRef(null)
   const prevKnock = useRef(knockKey)
   const pdLocal = useRef(null)
+  const meshRef = useRef(null)
+  const { clock } = useThree()
+  const birthTime = useRef(clock.getElapsedTime())
+
+  // Placement pop: damped spring 1+0.22·e^(-7t)·cos(12t), settles by 400ms
+  useFrame(() => {
+    if (!meshRef.current || birthTime.current === null) return
+    const age = clock.getElapsedTime() - birthTime.current
+    if (age > 0.4) { meshRef.current.scale.setScalar(1); birthTime.current = null; return }
+    meshRef.current.scale.setScalar(1 + 0.22 * Math.exp(-7 * age) * Math.cos(12 * age))
+  })
 
   useEffect(() => {
     if (knockKey !== prevKnock.current && rb.current) {
       prevKnock.current = knockKey
       try { rb.current.setBodyType(0, true) } catch {}
       rb.current.applyImpulse(
-        { x: (Math.random() - 0.5) * 20, y: Math.random() * 8 + 4, z: (Math.random() - 0.5) * 20 },
+        { x: (Math.random() - 0.5) * 26, y: Math.random() * 10 + 6, z: (Math.random() - 0.5) * 26 },
         true,
       )
       rb.current.applyTorqueImpulse(
-        { x: (Math.random() - 0.5) * 10, y: (Math.random() - 0.5) * 10, z: (Math.random() - 0.5) * 10 },
+        { x: (Math.random() - 0.5) * 16, y: (Math.random() - 0.5) * 16, z: (Math.random() - 0.5) * 16 },
         true,
       )
     }
@@ -324,6 +387,7 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
     >
       <CuboidCollider args={[0.5, 0.5, 0.5]} />
       <mesh
+        ref={meshRef}
         castShadow
         receiveShadow
         geometry={BOX_GEO}
@@ -333,7 +397,13 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
         onPointerLeave={handlePointerLeave}
         onPointerCancel={handlePointerCancel}
       >
-        {block.color === 'rainbow' ? <RainbowMaterial /> : block.color === 'glitter' ? <GlitterMaterial /> : <meshStandardMaterial color={block.color} roughness={0.4} metalness={0.1} />}
+        {block.color === 'rainbow'
+          ? <RainbowMaterial />
+          : block.color === 'glitter'
+          ? <GlitterMaterial />
+          : block.isFixed
+          ? <FixedBlockMaterial color={block.color} />
+          : <meshStandardMaterial color={block.color} roughness={0.25} metalness={0.0} />}
       </mesh>
       <lineSegments geometry={EDGES_GEO}>
         <lineBasicMaterial color="#000" transparent opacity={0.10} />
