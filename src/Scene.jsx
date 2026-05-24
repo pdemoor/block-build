@@ -38,7 +38,7 @@ function FixedBlockMaterial({ color }) {
     const t = clock.getElapsedTime()
     ref.current.emissiveIntensity = 0.10 + Math.sin(t * 2.1) * 0.07 + Math.sin(t * 8.4) * 0.025
   })
-  return <meshStandardMaterial ref={ref} color={color} roughness={0.22} metalness={0.05} emissive={color} emissiveIntensity={0.10} />
+  return <meshStandardMaterial ref={ref} color={color} roughness={0.18} metalness={0.08} emissive={color} emissiveIntensity={0.10} />
 }
 
 // Expanding ring shockwave on knock
@@ -329,6 +329,29 @@ function BlackMaterial({ isFixed }) {
   return <meshStandardMaterial ref={ref} color="#111111" roughness={0.06} metalness={0.92} emissive="#6090ff" emissiveIntensity={isFixed ? 0.05 : 0} />
 }
 
+// Brushed metallic silver
+function SilverMaterial({ isFixed }) {
+  const ref = useRef(null)
+  useFrame(({ clock }) => {
+    if (!ref.current || !isFixed) return
+    const t = clock.getElapsedTime()
+    ref.current.emissiveIntensity = 0.06 + Math.sin(t * 2.1) * 0.04 + Math.sin(t * 8.4) * 0.015
+  })
+  return <meshStandardMaterial ref={ref} color="#C0C0C0" roughness={0.12} metalness={0.86} emissive="#C0C0C0" emissiveIntensity={isFixed ? 0.06 : 0} />
+}
+
+// Frosted ice — soft constant glow, stronger when floating
+function IceCyanMaterial({ isFixed }) {
+  const ref = useRef(null)
+  useFrame(({ clock }) => {
+    if (!ref.current) return
+    const t = clock.getElapsedTime()
+    const base = isFixed ? 0.10 : 0.05
+    ref.current.emissiveIntensity = base + Math.sin(t * 1.7) * 0.03 + Math.sin(t * 5.3) * 0.015
+  })
+  return <meshStandardMaterial ref={ref} color="#7DF9FF" roughness={0.25} metalness={0.04} emissive="#7DF9FF" emissiveIntensity={0.05} />
+}
+
 function GlitterMaterial() {
   const ref = useRef(null)
   useFrame(({ clock }) => {
@@ -348,8 +371,11 @@ function RainbowMaterial() {
     const t = clock.getElapsedTime()
     ref.current.color.setHSL(t * 0.3 % 1, 1, 0.55)
     ref.current.emissive.setHSL((t * 0.3 + 0.5) % 1, 0.8, 0.12)
+    // Metalness shimmer: specular highlight dances as material "catches light"
+    ref.current.metalness = 0.45 + Math.sin(t * 7.3) * 0.25 + Math.sin(t * 13.1) * 0.12
+    ref.current.roughness  = 0.13 + Math.sin(t * 4.7) * 0.06
   })
-  return <meshStandardMaterial ref={ref} roughness={0.2} metalness={0.5} emissiveIntensity={0.4} />
+  return <meshStandardMaterial ref={ref} roughness={0.13} metalness={0.5} emissiveIntensity={0.4} />
 }
 
 const SPARK_COUNT = 18
@@ -541,9 +567,13 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
           ? <GoldMaterial isFixed={block.isFixed} />
           : block.color === '#111111'
           ? <BlackMaterial isFixed={block.isFixed} />
+          : block.color === '#C0C0C0'
+          ? <SilverMaterial isFixed={block.isFixed} />
+          : block.color === '#7DF9FF'
+          ? <IceCyanMaterial isFixed={block.isFixed} />
           : block.isFixed
           ? <FixedBlockMaterial color={block.color} />
-          : <meshStandardMaterial color={block.color} roughness={0.25} metalness={0.0} />}
+          : <meshStandardMaterial color={block.color} roughness={0.18} metalness={0.08} />}
       </mesh>
       <lineSegments geometry={EDGES_GEO}>
         <lineBasicMaterial color="#000" transparent opacity={0.10} />
