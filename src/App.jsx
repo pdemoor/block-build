@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, forwardRef } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls, Environment } from '@react-three/drei'
 import { Physics } from '@react-three/rapier'
@@ -11,6 +11,7 @@ const PALETTE = [
 ]
 const LS_KEY = 'blockbuild_saves'
 const FONT = "system-ui, -apple-system, sans-serif"
+const MAX_HISTORY = 20
 
 function getSaves() {
   try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}') } catch { return {} }
@@ -24,13 +25,26 @@ export default function App() {
   const [saves, setSaves] = useState(getSaves)
   const [modal, setModal] = useState(null) // 'save' | 'load' | null
   const [saveName, setSaveName] = useState('')
+  const [canUndo, setCanUndo] = useState(false)
   const nextId = useRef(0)
   const orbitRef = useRef(null)
   // ref so placement callbacks always see current color without re-creating
   const colorRef = useRef(color)
   colorRef.current = color
+  // mirror blocks into a ref so history callbacks can read current state
+  const blocksRef = useRef(blocks)
+  blocksRef.current = blocks
+  // history stack: { blocks: Block[], type: 'place' | 'knock' }[]
+  const historyRef = useRef([])
+
+  function pushHistory(snap, type) {
+    const h = historyRef.current
+    historyRef.current = [...h.slice(-(MAX_HISTORY - 1)), { blocks: snap, type }]
+    setCanUndo(true)
+  }
 
   const placeBlock = useCallback((gridX, gridZ) => {
+    pushHistory(blocksRef.current, 'place')
     setBlocks(prev => {
       const stackLevel = prev.filter(b => b.gridX === gridX && b.gridZ === gridZ).length
       return [...prev, {
@@ -42,9 +56,27 @@ export default function App() {
     })
   }, [])
 
-  const knockDown = useCallback(() => setKnockKey(k => k + 1), [])
+  const knockDown = useCallback(() => {
+    pushHistory(blocksRef.current, 'knock')
+    setKnockKey(k => k + 1)
+  }, [])
+
+  const undo = useCallback(() => {
+    const h = historyRef.current
+    if (!h.length) return
+    const { blocks: snap, type } = h[h.length - 1]
+    historyRef.current = h.slice(0, -1)
+    setCanUndo(historyRef.current.length > 0)
+    nextId.current = snap.length > 0
+      ? snap.reduce((m, b) => Math.max(m, b.id), -1) + 1
+      : 0
+    setBlocks(snap)
+    if (type === 'knock') setPhysicsKey(k => k + 1)
+  }, [])
 
   const clear = useCallback(() => {
+    historyRef.current = []
+    setCanUndo(false)
     setBlocks([])
     nextId.current = 0
     setPhysicsKey(k => k + 1)
@@ -64,6 +96,8 @@ export default function App() {
   const handleLoad = useCallback((name) => {
     const data = saves[name]
     if (!data) return
+    historyRef.current = []
+    setCanUndo(false)
     nextId.current = data.length
     setBlocks(data.map((b, i) => ({ ...b, id: i, position: [b.gridX, b.stackLevel + 0.5, b.gridZ] })))
     setPhysicsKey(k => k + 1)
@@ -115,11 +149,18 @@ export default function App() {
       <header style={{
         position: 'absolute', top: 0, left: 0, right: 0,
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        padding: '14px 18px', pointerEvents: 'none',
+        padding: '10px 18px', pointerEvents: 'none',
       }}>
-        <span style={{ color: '#fff', fontSize: 22, fontWeight: 800, letterSpacing: 2, textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>
-          BLOCK BUILD
-        </span>
+        <img
+          src="/logo.png"
+          alt="Block Build"
+          style={{
+            height: 'clamp(32px, 6vw, 48px)',
+            width: 'auto',
+            imageRendering: 'pixelated',
+            filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.6))',
+          }}
+        />
         {blocks.length > 0 && (
           <span style={{ color: 'rgba(255,255,255,0.65)', fontSize: 13 }}>
             {blocks.length} block{blocks.length !== 1 ? 's' : ''}
@@ -138,7 +179,7 @@ export default function App() {
 
       {/* Colour palette — outer wrapper is pointer-transparent so orbit gestures
           starting in the margin areas still reach the canvas */}
-      <div style={{ position: 'absolute', bottom: 148, left: 0, right: 0, display: 'flex', justifyContent: 'center', padding: '0 10px', pointerEvents: 'none' }}>
+      <div style={{ position: 'absolute', bottom: 158, left: 0, right: 0, display: 'flex', justifyContent: 'center', padding: '0 10px', pointerEvents: 'none' }}>
         <div style={{
           display: 'flex', gap: 7, padding: '8px 12px',
           background: 'rgba(0,0,0,0.55)', borderRadius: 28,
@@ -172,6 +213,7 @@ export default function App() {
         <div style={{ display: 'flex', gap: 8, width: '100%', maxWidth: 340, pointerEvents: 'auto' }}>
           <Btn bg="#27ae60" onTap={() => { setModal('save'); setSaveName('') }} disabled={!blocks.length}>Save</Btn>
           <Btn bg="#8e44ad" onTap={() => setModal('load')} disabled={!saveNames.length}>Load</Btn>
+          <Btn bg="#546e7a" onTap={undo} disabled={!canUndo}>↩ Undo</Btn>
           <Btn bg="#7f8c8d" onTap={clear} disabled={!blocks.length}>Clear</Btn>
         </div>
         <div style={{ width: '100%', maxWidth: 340, pointerEvents: 'auto' }}>
@@ -248,7 +290,7 @@ function Modal({ children, onClose }) {
         style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)' }}
       />
       <div style={{
-        position: 'absolute', bottom: 150, left: '50%', transform: 'translateX(-50%)',
+        position: 'absolute', bottom: 160, left: '50%', transform: 'translateX(-50%)',
         width: 'calc(100% - 32px)', maxWidth: 340,
         background: 'rgba(12,12,30,0.97)', borderRadius: 18, padding: 18,
         border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(16px)',
