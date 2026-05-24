@@ -52,7 +52,7 @@ function applySwipeImpulse(camera, body, swipeDx, swipeDyUp) {
   )
 }
 
-function SwipeHandler({ swipeRef, orbitRef, onFreeBlock, knockModeRef }) {
+function SwipeHandler({ swipeRef, orbitRef, onFreeBlock }) {
   const { gl, camera } = useThree()
 
   useEffect(() => {
@@ -70,7 +70,7 @@ function SwipeHandler({ swipeRef, orbitRef, onFreeBlock, knockModeRef }) {
 
       const isSwipeUp = swipeDyUp > 30 && Math.abs(swipeDyUp) > Math.abs(dx) * 0.6 && dt < 700
 
-      if (isSwipeUp && sw.rb.current && knockModeRef.current) {
+      if (isSwipeUp && sw.rb.current) {
         if (sw.isFixed) {
           sw.rb.current.setBodyType(0, true)
           onFreeBlock(sw.blockId)
@@ -99,15 +99,13 @@ function SwipeHandler({ swipeRef, orbitRef, onFreeBlock, knockModeRef }) {
   return null
 }
 
-export default function Scene({ blocks, knockKey, onPlace, orbitRef, antiGravity, placeHeight, color, onFreeBlock, knockMode }) {
+export default function Scene({ blocks, knockKey, onPlace, orbitRef, antiGravity, placeHeight, color, onFreeBlock }) {
   const swipeRef = useRef(null)
-  const knockModeRef = useRef(knockMode)
-  knockModeRef.current = knockMode
   const [ghostGrid, setGhostGrid] = useState(null) // {x, z} or null
 
   return (
     <>
-      <SwipeHandler swipeRef={swipeRef} orbitRef={orbitRef} onFreeBlock={onFreeBlock} knockModeRef={knockModeRef} />
+      <SwipeHandler swipeRef={swipeRef} orbitRef={orbitRef} onFreeBlock={onFreeBlock} />
       <Floor
         onPlace={onPlace}
         antiGravity={antiGravity}
@@ -127,7 +125,6 @@ export default function Scene({ blocks, knockKey, onPlace, orbitRef, antiGravity
           antiGravity={antiGravity}
           placeHeight={placeHeight}
           setGhostGrid={setGhostGrid}
-          knockModeRef={knockModeRef}
         />
       ))}
     </>
@@ -223,7 +220,7 @@ function RainbowMaterial() {
   return <meshStandardMaterial ref={ref} roughness={0.2} metalness={0.5} emissiveIntensity={0.4} />
 }
 
-function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, placeHeight, setGhostGrid, knockModeRef }) {
+function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, placeHeight, setGhostGrid }) {
   const rb = useRef(null)
   const prevKnock = useRef(knockKey)
   const pdLocal = useRef(null)
@@ -248,10 +245,8 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
     e.stopPropagation()
     const now = Date.now()
     pdLocal.current = { t: now, x: e.clientX, y: e.clientY }
-    if (knockModeRef.current) {
-      if (orbitRef?.current) orbitRef.current.enabled = false
-      swipeRef.current = { x0: e.clientX, y0: e.clientY, t0: now, rb, blockId: block.id, isFixed: block.isFixed }
-    }
+    if (orbitRef?.current) orbitRef.current.enabled = false
+    swipeRef.current = { x0: e.clientX, y0: e.clientY, t0: now, rb, blockId: block.id, isFixed: block.isFixed }
   }
 
   function handlePointerMove(e) {

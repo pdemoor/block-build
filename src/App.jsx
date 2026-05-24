@@ -90,7 +90,6 @@ export default function App() {
   const [antiGravity, setAntiGravity] = useState(false)
   const [placeHeight, setPlaceHeight] = useState(0)
   const [toast, setToast] = useState(null)
-  const [knockMode, setKnockMode] = useState(false)
 
   // Refs so callbacks always see current values
   const colorRef = useRef(color)
@@ -103,8 +102,6 @@ export default function App() {
   placeHeightRef.current = placeHeight
   const historyRef = useRef([])
   const toastTimer = useRef(null)
-  const knockModeRef = useRef(knockMode)
-  knockModeRef.current = knockMode
 
   function pushHistory(snap, type) {
     historyRef.current = [...historyRef.current.slice(-(MAX_HISTORY - 1)), { blocks: snap, type }]
@@ -220,8 +217,6 @@ export default function App() {
     })
   }, [])
 
-  const toggleKnockMode = useCallback(() => setKnockMode(v => !v), [])
-
   const saveNames = Object.keys(saves)
   // Palette clears the button rows below it; extra height when height controls visible
   const paletteBottom = antiGravity ? 204 : 156
@@ -253,7 +248,6 @@ export default function App() {
             placeHeight={placeHeight}
             color={color}
             onFreeBlock={freeBlock}
-            knockMode={knockMode}
           />
         </Physics>
         <OrbitControls
@@ -350,9 +344,9 @@ export default function App() {
 
         {/* Row 3: mode toggles */}
         <div style={{ display: 'flex', gap: 8, width: '100%', maxWidth: 360, pointerEvents: 'auto' }}>
-          <ModeBtn active={knockMode} onTap={toggleKnockMode} color="#e74c3c" glow="rgba(231,76,60,0.5)">
-            💥 Knock Mode
-          </ModeBtn>
+          <Btn bg="#e74c3c" onTap={knockDown} disabled={!blocks.length} tall>
+            💥 Knock Over
+          </Btn>
           <ModeBtn active={antiGravity} onTap={toggleAntiGravity} color="#8e44ad" glow="rgba(142,68,173,0.5)">
             🔮 Float Mode
           </ModeBtn>
