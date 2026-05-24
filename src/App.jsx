@@ -264,6 +264,12 @@ export default function App() {
         .bb-btn:active { transform: scale(0.88) !important; transition: transform 0s !important; }
         .bb-swatch { transition: transform 0.16s cubic-bezier(0.34,1.56,0.64,1); }
         .bb-swatch:active { transform: scale(0.80) !important; transition: transform 0s !important; }
+        @keyframes bbSwatchPulse {
+          0%, 100% { transform: scale(1.15); }
+          50%       { transform: scale(1.22); }
+        }
+        .bb-swatch-selected { animation: bbSwatchPulse 1.9s ease-in-out infinite; }
+        .bb-swatch-selected:active { animation: none; transform: scale(0.80) !important; transition: transform 0s !important; }
       `}</style>
 
       <Canvas
@@ -363,7 +369,7 @@ export default function App() {
           {PALETTE.map(c => (
             <button
               key={c}
-              className="bb-swatch"
+              className={`bb-swatch${color === c ? ' bb-swatch-selected' : ''}`}
               onPointerDown={() => setColor(c)}
               style={{
                 width: 28, height: 28, borderRadius: '50%',
@@ -378,7 +384,7 @@ export default function App() {
                   ? `0 0 0 2px ${swatchGlow(c)}, 0 0 10px ${swatchGlow(c)}, 0 2px 6px rgba(0,0,0,0.5)`
                   : '0 1px 3px rgba(0,0,0,0.3)',
                 cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
-                transform: color === c ? 'scale(1.15)' : 'scale(1)',
+                transform: color === c ? undefined : 'scale(1)',
               }}
             />
           ))}

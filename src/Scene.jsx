@@ -30,14 +30,15 @@ function GhostBlock({ x, z, placeHeight, color }) {
   )
 }
 
-// Gentle pulsing glow for fixed (floating) blocks
+// Magical shimmer glow for fixed (floating) blocks: slow pulse + fast flicker
 function FixedBlockMaterial({ color }) {
   const ref = useRef(null)
   useFrame(({ clock }) => {
     if (!ref.current) return
-    ref.current.emissiveIntensity = 0.06 + Math.sin(clock.getElapsedTime() * 2.3) * 0.04
+    const t = clock.getElapsedTime()
+    ref.current.emissiveIntensity = 0.10 + Math.sin(t * 2.1) * 0.07 + Math.sin(t * 8.4) * 0.025
   })
-  return <meshStandardMaterial ref={ref} color={color} roughness={0.25} metalness={0.0} emissive={color} emissiveIntensity={0.06} />
+  return <meshStandardMaterial ref={ref} color={color} roughness={0.22} metalness={0.05} emissive={color} emissiveIntensity={0.10} />
 }
 
 // Expanding ring shockwave on knock
@@ -218,6 +219,7 @@ export default function Scene({ blocks, knockKey, onPlace, orbitRef, antiGravity
       <StarField />
       <BreathingLight />
       <Shockwave knockKey={knockKey} />
+      <KnockParticles knockKey={knockKey} />
       <SwipeHandler swipeRef={swipeRef} orbitRef={orbitRef} onFreeBlock={onFreeBlock} />
       <Floor
         onPlace={onPlace}
@@ -318,25 +320,109 @@ function RainbowMaterial() {
   return <meshStandardMaterial ref={ref} roughness={0.2} metalness={0.5} emissiveIntensity={0.4} />
 }
 
+const SPARK_COUNT = 18
+
+function KnockParticles({ knockKey }) {
+  const pointsRef = useRef(null)
+  const matRef = useRef(null)
+  const { clock } = useThree()
+  const startRef = useRef(null)
+  const prevKey = useRef(knockKey)
+  const velRef = useRef([])
+
+  const geo = useMemo(() => {
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(SPARK_COUNT * 3), 3))
+    return g
+  }, [])
+
+  useEffect(() => {
+    if (knockKey === prevKey.current) return
+    prevKey.current = knockKey
+    startRef.current = clock.getElapsedTime()
+    velRef.current = Array.from({ length: SPARK_COUNT }, () => {
+      const phi = Math.random() * Math.PI * 2
+      const el = (0.18 + Math.random() * 0.62) * Math.PI * 0.5
+      const spd = 2.5 + Math.random() * 4.5
+      return [Math.cos(el) * Math.cos(phi) * spd, Math.sin(el) * spd, Math.cos(el) * Math.sin(phi) * spd]
+    })
+  }, [knockKey, clock])
+
+  useFrame(() => {
+    if (!pointsRef.current || !matRef.current || startRef.current === null) return
+    const age = clock.getElapsedTime() - startRef.current
+    const DUR = 0.72
+    if (age > DUR) { matRef.current.opacity = 0; startRef.current = null; return }
+    const t = age / DUR
+    matRef.current.opacity = (t < 0.12 ? t / 0.12 : 1 - t) * 0.88
+    const pos = geo.attributes.position.array
+    for (let i = 0; i < SPARK_COUNT; i++) {
+      const [vx, vy, vz] = velRef.current[i] || [0, 2, 0]
+      pos[i * 3]     = vx * age
+      pos[i * 3 + 1] = Math.max(0.05, vy * age - 4.75 * age * age + 0.25)
+      pos[i * 3 + 2] = vz * age
+    }
+    geo.attributes.position.needsUpdate = true
+  })
+
+  return (
+    <points ref={pointsRef} geometry={geo}>
+      <pointsMaterial ref={matRef} size={0.15} color="#ff8822" transparent opacity={0} depthWrite={false} sizeAttenuation />
+    </points>
+  )
+}
+
 function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, placeHeight, setGhostGrid }) {
   const rb = useRef(null)
   const prevKnock = useRef(knockKey)
   const pdLocal = useRef(null)
   const meshRef = useRef(null)
+  const flashMatRef = useRef(null)
+  const knockFlashRef = useRef(null)
   const { clock } = useThree()
   const birthTime = useRef(clock.getElapsedTime())
 
-  // Placement pop: damped spring 1+0.22·e^(-7t)·cos(12t), settles by 400ms
   useFrame(() => {
-    if (!meshRef.current || birthTime.current === null) return
-    const age = clock.getElapsedTime() - birthTime.current
-    if (age > 0.4) { meshRef.current.scale.setScalar(1); birthTime.current = null; return }
-    meshRef.current.scale.setScalar(1 + 0.22 * Math.exp(-7 * age) * Math.cos(12 * age))
+    const t = clock.getElapsedTime()
+
+    // Scale: placement bounce (400ms spring), then float breathing for fixed blocks
+    if (meshRef.current) {
+      if (birthTime.current !== null) {
+        const age = t - birthTime.current
+        if (age > 0.4) { meshRef.current.scale.setScalar(1); birthTime.current = null }
+        else { meshRef.current.scale.setScalar(1 + 0.22 * Math.exp(-7 * age) * Math.cos(12 * age)) }
+      } else if (block.isFixed) {
+        // Very subtle breathing ±1.2%, phase-offset per block id so they're not in sync
+        meshRef.current.scale.setScalar(1 + Math.sin(t * 1.8 + block.id * 0.7) * 0.012)
+      }
+    }
+
+    // Flash overlay: knock orange burst takes priority over birth white pop
+    if (!flashMatRef.current) return
+    if (knockFlashRef.current !== null) {
+      const age = t - knockFlashRef.current
+      if (age > 0.28) {
+        knockFlashRef.current = null
+        flashMatRef.current.opacity = 0
+      } else {
+        flashMatRef.current.color.set('#ff7730')
+        flashMatRef.current.opacity = age < 0.07
+          ? (age / 0.07) * 0.52
+          : Math.max(0, (1 - (age - 0.07) / 0.21) * 0.52)
+      }
+    } else if (birthTime.current !== null) {
+      const age = t - birthTime.current
+      flashMatRef.current.color.set('#ffffff')
+      flashMatRef.current.opacity = age < 0.15 ? (1 - age / 0.15) * 0.38 : 0
+    } else {
+      flashMatRef.current.opacity = 0
+    }
   })
 
   useEffect(() => {
     if (knockKey !== prevKnock.current && rb.current) {
       prevKnock.current = knockKey
+      knockFlashRef.current = clock.getElapsedTime()
       try { rb.current.setBodyType(0, true) } catch {}
       rb.current.applyImpulse(
         { x: (Math.random() - 0.5) * 26, y: Math.random() * 10 + 6, z: (Math.random() - 0.5) * 26 },
@@ -370,23 +456,19 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
     const loc = pdLocal.current
     pdLocal.current = null
     if (!loc) return
-
     const dx = e.clientX - loc.x
     const dy = e.clientY - loc.y
     const isTap = Date.now() - loc.t < 300 && dx * dx + dy * dy < 64
-
     if (isTap) {
       swipeRef.current = null
       if (orbitRef?.current) orbitRef.current.enabled = true
       onPlace(block.gridX, block.gridZ)
     }
-    // Non-tap: leave swipeRef set for SwipeHandler to evaluate
   }
 
   function handlePointerLeave(e) {
     if (!e.isPrimary) return
     pdLocal.current = null
-    // Don't clear swipeRef — swipe may be continuing past the block edge
   }
 
   function handlePointerCancel(e) {
@@ -430,6 +512,10 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
       <lineSegments geometry={EDGES_GEO}>
         <lineBasicMaterial color="#000" transparent opacity={0.10} />
       </lineSegments>
+      {/* Placement white pop + knock orange burst overlay */}
+      <mesh geometry={BOX_GEO} scale={1.02} raycast={() => null}>
+        <meshBasicMaterial ref={flashMatRef} color="#ffffff" transparent opacity={0} depthWrite={false} />
+      </mesh>
     </RigidBody>
   )
 }
