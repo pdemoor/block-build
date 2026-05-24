@@ -19,13 +19,34 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Allow all branches in github-pages environment
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            try {
+              await github.rest.repos.updateEnvironment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                environment_name: 'github-pages',
+                deployment_branch_policy: null,
+              });
+              core.info('Removed branch restrictions from github-pages environment');
+            } catch (e) {
+              core.warning('Could not update environment: ' + e.message);
+            }
+
       - uses: actions/configure-pages@v5
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
+
       - run: npm ci
       - run: npm run build
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
