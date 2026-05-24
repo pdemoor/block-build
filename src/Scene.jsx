@@ -52,7 +52,7 @@ function applySwipeImpulse(camera, body, swipeDx, swipeDyUp) {
   )
 }
 
-function SwipeHandler({ swipeRef, orbitRef, onFreeBlock }) {
+function SwipeHandler({ swipeRef, orbitRef, onFreeBlock, knockModeRef }) {
   const { gl, camera } = useThree()
 
   useEffect(() => {
@@ -70,9 +70,8 @@ function SwipeHandler({ swipeRef, orbitRef, onFreeBlock }) {
 
       const isSwipeUp = swipeDyUp > 30 && Math.abs(swipeDyUp) > Math.abs(dx) * 0.6 && dt < 700
 
-      if (isSwipeUp && sw.rb.current) {
+      if (isSwipeUp && sw.rb.current && knockModeRef.current) {
         if (sw.isFixed) {
-          // Convert fixed body to dynamic before applying impulse
           sw.rb.current.setBodyType(0, true)
           onFreeBlock(sw.blockId)
         }
@@ -100,13 +99,15 @@ function SwipeHandler({ swipeRef, orbitRef, onFreeBlock }) {
   return null
 }
 
-export default function Scene({ blocks, knockKey, onPlace, orbitRef, antiGravity, placeHeight, color, onFreeBlock }) {
+export default function Scene({ blocks, knockKey, onPlace, orbitRef, antiGravity, placeHeight, color, onFreeBlock, knockMode }) {
   const swipeRef = useRef(null)
+  const knockModeRef = useRef(knockMode)
+  knockModeRef.current = knockMode
   const [ghostGrid, setGhostGrid] = useState(null) // {x, z} or null
 
   return (
     <>
-      <SwipeHandler swipeRef={swipeRef} orbitRef={orbitRef} onFreeBlock={onFreeBlock} />
+      <SwipeHandler swipeRef={swipeRef} orbitRef={orbitRef} onFreeBlock={onFreeBlock} knockModeRef={knockModeRef} />
       <Floor
         onPlace={onPlace}
         antiGravity={antiGravity}
@@ -126,6 +127,7 @@ export default function Scene({ blocks, knockKey, onPlace, orbitRef, antiGravity
           antiGravity={antiGravity}
           placeHeight={placeHeight}
           setGhostGrid={setGhostGrid}
+          knockModeRef={knockModeRef}
         />
       ))}
     </>
@@ -209,7 +211,7 @@ function RainbowMaterial() {
   return <meshStandardMaterial ref={ref} roughness={0.2} metalness={0.5} emissiveIntensity={0.4} />
 }
 
-function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, placeHeight, setGhostGrid }) {
+function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, placeHeight, setGhostGrid, knockModeRef }) {
   const rb = useRef(null)
   const prevKnock = useRef(knockKey)
   const pdLocal = useRef(null)
@@ -217,7 +219,6 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
   useEffect(() => {
     if (knockKey !== prevKnock.current && rb.current) {
       prevKnock.current = knockKey
-      // Ensure body is dynamic before applying impulse (handles fixed→dynamic transition timing)
       try { rb.current.setBodyType(0, true) } catch {}
       rb.current.applyImpulse(
         { x: (Math.random() - 0.5) * 20, y: Math.random() * 8 + 4, z: (Math.random() - 0.5) * 20 },
@@ -233,10 +234,12 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
   function handlePointerDown(e) {
     if (!e.isPrimary) return
     e.stopPropagation()
-    if (orbitRef?.current) orbitRef.current.enabled = false
     const now = Date.now()
     pdLocal.current = { t: now, x: e.clientX, y: e.clientY }
-    swipeRef.current = { x0: e.clientX, y0: e.clientY, t0: now, rb, blockId: block.id, isFixed: block.isFixed }
+    if (knockModeRef.current) {
+      if (orbitRef?.current) orbitRef.current.enabled = false
+      swipeRef.current = { x0: e.clientX, y0: e.clientY, t0: now, rb, blockId: block.id, isFixed: block.isFixed }
+    }
   }
 
   function handlePointerMove(e) {

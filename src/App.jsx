@@ -12,7 +12,7 @@ const PALETTE = [
 ]
 const LS_KEY = 'blockbuild_saves'
 const FONT = "system-ui, -apple-system, sans-serif"
-const MAX_HISTORY = 20
+const MAX_HISTORY = 30
 
 function getSaves() {
   try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}') } catch { return {} }
@@ -89,6 +89,7 @@ export default function App() {
   const [antiGravity, setAntiGravity] = useState(false)
   const [placeHeight, setPlaceHeight] = useState(0)
   const [toast, setToast] = useState(null)
+  const [knockMode, setKnockMode] = useState(false)
 
   // Refs so callbacks always see current values
   const colorRef = useRef(color)
@@ -101,6 +102,8 @@ export default function App() {
   placeHeightRef.current = placeHeight
   const historyRef = useRef([])
   const toastTimer = useRef(null)
+  const knockModeRef = useRef(knockMode)
+  knockModeRef.current = knockMode
 
   function pushHistory(snap, type) {
     historyRef.current = [...historyRef.current.slice(-(MAX_HISTORY - 1)), { blocks: snap, type }]
@@ -126,7 +129,6 @@ export default function App() {
         id: nextId.current++,
         gridX, gridZ, stackLevel,
         color: col,
-        // gridX/gridZ are integer cell indices; world center = index + 0.5
         position: [gridX + 0.5, stackLevel + 0.5, gridZ + 0.5],
         isFixed: isAG,
       }]
@@ -139,7 +141,6 @@ export default function App() {
 
   const knockDown = useCallback(() => {
     pushHistory(blocksRef.current, 'knock')
-    // Free all fixed blocks so they become dynamic before the impulse fires
     setBlocks(prev => prev.map(b => b.isFixed ? { ...b, isFixed: false } : b))
     setKnockKey(k => k + 1)
   }, [])
@@ -156,8 +157,8 @@ export default function App() {
   }, [])
 
   const clear = useCallback(() => {
-    historyRef.current = []
-    setCanUndo(false)
+    if (!blocksRef.current.length) return
+    pushHistory(blocksRef.current, 'place')
     setBlocks([])
     nextId.current = 0
     setPhysicsKey(k => k + 1)
@@ -192,8 +193,7 @@ export default function App() {
   const handleLoad = useCallback((name) => {
     const data = saves[name]
     if (!data) return
-    historyRef.current = []
-    setCanUndo(false)
+    pushHistory(blocksRef.current, 'place')
     nextId.current = data.length
     setBlocks(data.map((b, i) => ({
       ...b, id: i,
@@ -214,14 +214,16 @@ export default function App() {
 
   const toggleAntiGravity = useCallback(() => {
     setAntiGravity(v => {
-      if (v) setPlaceHeight(0) // reset height when turning off
+      if (v) setPlaceHeight(0)
       return !v
     })
   }, [])
 
+  const toggleKnockMode = useCallback(() => setKnockMode(v => !v), [])
+
   const saveNames = Object.keys(saves)
-  // Palette sits above the button area; shift up when height controls are visible
-  const paletteBottom = antiGravity ? 262 : 212
+  // Palette clears the button rows below it; extra height when height controls visible
+  const paletteBottom = antiGravity ? 204 : 156
 
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative', fontFamily: FONT, touchAction: 'none' }}>
@@ -250,6 +252,7 @@ export default function App() {
             placeHeight={placeHeight}
             color={color}
             onFreeBlock={freeBlock}
+            knockMode={knockMode}
           />
         </Physics>
         <OrbitControls
@@ -296,7 +299,7 @@ export default function App() {
           display: 'flex', gap: 7, padding: '8px 12px',
           background: 'rgba(0,0,0,0.55)', borderRadius: 28,
           backdropFilter: 'blur(10px)',
-          flexWrap: 'wrap', justifyContent: 'center', maxWidth: 340,
+          flexWrap: 'wrap', justifyContent: 'center', maxWidth: 360,
           pointerEvents: 'auto',
         }}>
           {PALETTE.map(c => (
@@ -304,7 +307,9 @@ export default function App() {
               key={c}
               onPointerDown={() => setColor(c)}
               style={{
-                width: 30, height: 30, borderRadius: '50%', background: c === 'rainbow' ? 'conic-gradient(from 0deg, #ff0000, #ff8000, #ffff00, #00cc00, #0066ff, #cc00ff, #ff0000)' : c, padding: 0, flexShrink: 0,
+                width: 30, height: 30, borderRadius: '50%',
+                background: c === 'rainbow' ? 'conic-gradient(from 0deg, #ff0000, #ff8000, #ffff00, #00cc00, #0066ff, #cc00ff, #ff0000)' : c,
+                padding: 0, flexShrink: 0,
                 border: color === c ? '3px solid #fff' : '2px solid rgba(255,255,255,0.2)',
                 boxShadow: color === c
                   ? '0 0 0 2px rgba(255,255,255,0.35), 0 3px 8px rgba(0,0,0,0.5)'
@@ -316,24 +321,24 @@ export default function App() {
         </div>
       </div>
 
-      {/* Action buttons */}
+      {/* Bottom controls */}
       <div style={{
         position: 'absolute', bottom: 0, left: 0, right: 0,
         padding: '0 16px 34px', display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center',
         pointerEvents: 'none',
       }}>
-        {/* Row 1 */}
-        <div style={{ display: 'flex', gap: 8, width: '100%', maxWidth: 340, pointerEvents: 'auto' }}>
+        {/* Row 1: action buttons */}
+        <div style={{ display: 'flex', gap: 6, width: '100%', maxWidth: 360, pointerEvents: 'auto' }}>
+          <Btn bg="#546e7a" onTap={undo} disabled={!canUndo}>↩ Undo</Btn>
+          <Btn bg="#7f8c8d" onTap={clear} disabled={!blocks.length}>Clear</Btn>
           <Btn bg="#27ae60" onTap={() => { setModal('save'); setSaveName('') }} disabled={!blocks.length}>Save</Btn>
           <Btn bg="#2980b9" onTap={() => setModal('load')} disabled={!saveNames.length}>Load</Btn>
           <Btn bg="#16a085" onTap={handleShare} disabled={!blocks.length}>Share</Btn>
-          <Btn bg="#546e7a" onTap={undo} disabled={!canUndo}>↩</Btn>
-          <Btn bg="#7f8c8d" onTap={clear} disabled={!blocks.length}>Clear</Btn>
         </div>
 
-        {/* Row 2: height controls — only in anti-gravity mode */}
+        {/* Row 2: height controls — only in float mode */}
         {antiGravity && (
-          <div style={{ display: 'flex', gap: 8, width: '100%', maxWidth: 340, alignItems: 'center', pointerEvents: 'auto' }}>
+          <div style={{ display: 'flex', gap: 8, width: '100%', maxWidth: 360, alignItems: 'center', pointerEvents: 'auto' }}>
             <HeightBtn onTap={() => setPlaceHeight(h => Math.max(0, h - 1))} disabled={placeHeight === 0}>−</HeightBtn>
             <div style={{ flex: 1, textAlign: 'center', color: '#e8daef', fontSize: 13, fontWeight: 700, letterSpacing: 0.5 }}>
               Float height: {placeHeight}
@@ -342,20 +347,14 @@ export default function App() {
           </div>
         )}
 
-        {/* Row 3: anti-gravity toggle */}
-        <div style={{ width: '100%', maxWidth: 340, pointerEvents: 'auto' }}>
-          <Btn
-            bg={antiGravity ? '#8e44ad' : '#4a235a'}
-            onTap={toggleAntiGravity}
-            glow={antiGravity}
-          >
-            {antiGravity ? '🔮 Anti-Gravity ON' : '🔮 Anti-Gravity'}
-          </Btn>
-        </div>
-
-        {/* Row 4: knock down */}
-        <div style={{ width: '100%', maxWidth: 340, pointerEvents: 'auto' }}>
-          <Btn bg="#e74c3c" onTap={knockDown} disabled={!blocks.length} tall>💥 Knock Down</Btn>
+        {/* Row 3: mode toggles */}
+        <div style={{ display: 'flex', gap: 8, width: '100%', maxWidth: 360, pointerEvents: 'auto' }}>
+          <ModeBtn active={knockMode} onTap={toggleKnockMode} color="#e74c3c" glow="rgba(231,76,60,0.5)">
+            💥 Knock Mode
+          </ModeBtn>
+          <ModeBtn active={antiGravity} onTap={toggleAntiGravity} color="#8e44ad" glow="rgba(142,68,173,0.5)">
+            🔮 Float Mode
+          </ModeBtn>
         </div>
       </div>
 
@@ -440,8 +439,8 @@ function Modal({ children, onClose }) {
         style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)' }}
       />
       <div style={{
-        position: 'absolute', bottom: 220, left: '50%', transform: 'translateX(-50%)',
-        width: 'calc(100% - 32px)', maxWidth: 340,
+        position: 'absolute', bottom: 165, left: '50%', transform: 'translateX(-50%)',
+        width: 'calc(100% - 32px)', maxWidth: 360,
         background: 'rgba(12,12,30,0.97)', borderRadius: 18, padding: 18,
         border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(16px)',
       }}>
@@ -484,6 +483,32 @@ function Btn({ bg, onTap, disabled, children, tall, glow }) {
       }}
     >
       {children}
+    </button>
+  )
+}
+
+function ModeBtn({ active, onTap, color, glow, children }) {
+  return (
+    <button
+      onPointerDown={onTap}
+      style={{
+        flex: 1,
+        height: 52,
+        background: active ? color : 'rgba(255,255,255,0.07)',
+        color: active ? '#fff' : color,
+        border: active ? 'none' : `1.5px solid ${color}55`,
+        borderRadius: 26,
+        fontSize: 14,
+        fontWeight: 700,
+        fontFamily: FONT,
+        cursor: 'pointer',
+        boxShadow: active ? `0 4px 20px ${glow}` : 'none',
+        WebkitTapHighlightColor: 'transparent',
+        touchAction: 'manipulation',
+        userSelect: 'none',
+      }}
+    >
+      {children}{active ? ' ON' : ''}
     </button>
   )
 }
