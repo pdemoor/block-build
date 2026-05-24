@@ -17,8 +17,67 @@ function getSaves() {
   try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}') } catch { return {} }
 }
 
+// ---- Compact binary share encoding ----
+// Each block = 20 bits packed into 3 bytes:
+//   [gridX+12 : 5][gridZ+12 : 5][stackLevel : 5][colorIdx : 4][isFixed : 1]
+function encodeDesign(blocks) {
+  const buf = new Uint8Array(blocks.length * 3)
+  blocks.forEach((b, i) => {
+    const gx = Math.max(0, Math.min(31, b.gridX + 12))
+    const gz = Math.max(0, Math.min(31, b.gridZ + 12))
+    const sl = Math.max(0, Math.min(31, b.stackLevel))
+    const ci = Math.max(0, PALETTE.indexOf(b.color))
+    const fx = b.isFixed ? 1 : 0
+    const bits = (gx << 15) | (gz << 10) | (sl << 5) | (ci << 1) | fx
+    buf[i * 3]     = (bits >> 16) & 0xFF
+    buf[i * 3 + 1] = (bits >> 8)  & 0xFF
+    buf[i * 3 + 2] =  bits        & 0xFF
+  })
+  let bin = ''
+  buf.forEach(b => { bin += String.fromCharCode(b) })
+  return btoa(bin).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_')
+}
+
+function decodeDesign(str) {
+  const bin = atob(str.replace(/-/g, '+').replace(/_/g, '/'))
+  const count = Math.floor(bin.length / 3)
+  const blocks = []
+  for (let i = 0; i < count; i++) {
+    const bits = (bin.charCodeAt(i * 3) << 16) |
+                 (bin.charCodeAt(i * 3 + 1) << 8) |
+                  bin.charCodeAt(i * 3 + 2)
+    const gx = ((bits >> 15) & 0x1F) - 12
+    const gz = ((bits >> 10) & 0x1F) - 12
+    const sl =  (bits >> 5)  & 0x1F
+    const ci =  (bits >> 1)  & 0x0F
+    const fx =   bits        & 1
+    blocks.push({
+      id: i,
+      gridX: gx, gridZ: gz, stackLevel: sl,
+      color: PALETTE[Math.min(ci, PALETTE.length - 1)],
+      isFixed: fx === 1,
+      position: [gx, sl + 0.5, gz],
+    })
+  }
+  return blocks
+}
+
+function loadFromUrl() {
+  try {
+    const d = new URLSearchParams(window.location.search).get('d')
+    return d ? decodeDesign(d) : null
+  } catch { return null }
+}
+
 export default function App() {
-  const [blocks, setBlocks] = useState([])
+  const nextId = useRef(0)
+  const orbitRef = useRef(null)
+
+  const [blocks, setBlocks] = useState(() => {
+    const fromUrl = loadFromUrl()
+    if (fromUrl?.length) { nextId.current = fromUrl.length; return fromUrl }
+    return []
+  })
   const [color, setColor] = useState('#3498db')
   const [knockKey, setKnockKey] = useState(0)
   const [physicsKey, setPhysicsKey] = useState(0)
@@ -26,38 +85,60 @@ export default function App() {
   const [modal, setModal] = useState(null) // 'save' | 'load' | null
   const [saveName, setSaveName] = useState('')
   const [canUndo, setCanUndo] = useState(false)
-  const nextId = useRef(0)
-  const orbitRef = useRef(null)
-  // ref so placement callbacks always see current color without re-creating
+  const [antiGravity, setAntiGravity] = useState(false)
+  const [placeHeight, setPlaceHeight] = useState(0)
+  const [toast, setToast] = useState(null)
+
+  // Refs so callbacks always see current values
   const colorRef = useRef(color)
   colorRef.current = color
-  // mirror blocks into a ref so history callbacks can read current state
   const blocksRef = useRef(blocks)
   blocksRef.current = blocks
-  // history stack: { blocks: Block[], type: 'place' | 'knock' }[]
+  const antiGravityRef = useRef(antiGravity)
+  antiGravityRef.current = antiGravity
+  const placeHeightRef = useRef(placeHeight)
+  placeHeightRef.current = placeHeight
   const historyRef = useRef([])
+  const toastTimer = useRef(null)
 
   function pushHistory(snap, type) {
-    const h = historyRef.current
-    historyRef.current = [...h.slice(-(MAX_HISTORY - 1)), { blocks: snap, type }]
+    historyRef.current = [...historyRef.current.slice(-(MAX_HISTORY - 1)), { blocks: snap, type }]
     setCanUndo(true)
+  }
+
+  function showToast(msg) {
+    setToast(msg)
+    clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToast(null), 2500)
   }
 
   const placeBlock = useCallback((gridX, gridZ) => {
     pushHistory(blocksRef.current, 'place')
+    const isAG = antiGravityRef.current
+    const height = placeHeightRef.current
+    const col = colorRef.current
     setBlocks(prev => {
-      const stackLevel = prev.filter(b => b.gridX === gridX && b.gridZ === gridZ).length
+      const stackLevel = isAG
+        ? height
+        : prev.filter(b => b.gridX === gridX && b.gridZ === gridZ).length
       return [...prev, {
         id: nextId.current++,
         gridX, gridZ, stackLevel,
-        color: colorRef.current,
+        color: col,
         position: [gridX, stackLevel + 0.5, gridZ],
+        isFixed: isAG,
       }]
     })
   }, [])
 
+  const freeBlock = useCallback((id) => {
+    setBlocks(prev => prev.map(b => b.id === id ? { ...b, isFixed: false } : b))
+  }, [])
+
   const knockDown = useCallback(() => {
     pushHistory(blocksRef.current, 'knock')
+    // Free all fixed blocks so they become dynamic before the impulse fires
+    setBlocks(prev => prev.map(b => b.isFixed ? { ...b, isFixed: false } : b))
     setKnockKey(k => k + 1)
   }, [])
 
@@ -67,9 +148,7 @@ export default function App() {
     const { blocks: snap, type } = h[h.length - 1]
     historyRef.current = h.slice(0, -1)
     setCanUndo(historyRef.current.length > 0)
-    nextId.current = snap.length > 0
-      ? snap.reduce((m, b) => Math.max(m, b.id), -1) + 1
-      : 0
+    nextId.current = snap.length > 0 ? snap.reduce((m, b) => Math.max(m, b.id), -1) + 1 : 0
     setBlocks(snap)
     if (type === 'knock') setPhysicsKey(k => k + 1)
   }, [])
@@ -82,10 +161,25 @@ export default function App() {
     setPhysicsKey(k => k + 1)
   }, [])
 
+  const handleShare = useCallback(() => {
+    const cur = blocksRef.current
+    if (!cur.length) return
+    const code = encodeDesign(cur)
+    const url = `${window.location.origin}${window.location.pathname}?d=${code}`
+    if (navigator.share) {
+      navigator.share({ title: 'Block Build', text: 'Check out my block design!', url }).catch(() => {})
+    } else {
+      navigator.clipboard.writeText(url)
+        .then(() => showToast('Link copied!'))
+        .catch(() => showToast('Copy failed'))
+    }
+  }, [])
+
   const handleSave = useCallback(() => {
     const name = saveName.trim()
     if (!name) return
-    const data = blocks.map(({ gridX, gridZ, stackLevel, color: c }) => ({ gridX, gridZ, stackLevel, color: c }))
+    const data = blocks.map(({ gridX, gridZ, stackLevel, color: c, isFixed }) =>
+      ({ gridX, gridZ, stackLevel, color: c, isFixed: !!isFixed }))
     const updated = { ...saves, [name]: data }
     setSaves(updated)
     localStorage.setItem(LS_KEY, JSON.stringify(updated))
@@ -99,7 +193,11 @@ export default function App() {
     historyRef.current = []
     setCanUndo(false)
     nextId.current = data.length
-    setBlocks(data.map((b, i) => ({ ...b, id: i, position: [b.gridX, b.stackLevel + 0.5, b.gridZ] })))
+    setBlocks(data.map((b, i) => ({
+      ...b, id: i,
+      isFixed: !!b.isFixed,
+      position: [b.gridX, b.stackLevel + 0.5, b.gridZ],
+    })))
     setPhysicsKey(k => k + 1)
     setModal(null)
   }, [saves])
@@ -112,7 +210,16 @@ export default function App() {
     if (!Object.keys(updated).length) setModal(null)
   }, [saves])
 
+  const toggleAntiGravity = useCallback(() => {
+    setAntiGravity(v => {
+      if (v) setPlaceHeight(0) // reset height when turning off
+      return !v
+    })
+  }, [])
+
   const saveNames = Object.keys(saves)
+  // Palette sits above the button area; shift up when height controls are visible
+  const paletteBottom = antiGravity ? 262 : 212
 
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative', fontFamily: FONT, touchAction: 'none' }}>
@@ -132,7 +239,16 @@ export default function App() {
           shadow-camera-top={14} shadow-camera-bottom={-14}
         />
         <Physics key={physicsKey} gravity={[0, -20, 0]}>
-          <Scene blocks={blocks} knockKey={knockKey} onPlace={placeBlock} orbitRef={orbitRef} />
+          <Scene
+            blocks={blocks}
+            knockKey={knockKey}
+            onPlace={placeBlock}
+            orbitRef={orbitRef}
+            antiGravity={antiGravity}
+            placeHeight={placeHeight}
+            color={color}
+            onFreeBlock={freeBlock}
+          />
         </Physics>
         <OrbitControls
           ref={orbitRef}
@@ -154,11 +270,7 @@ export default function App() {
         <img
           src="/logo.png"
           alt="Block Build"
-          style={{
-            width: 'clamp(80px, 16vw, 140px)',
-            height: 'auto',
-            filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.7))',
-          }}
+          style={{ width: 'clamp(80px, 16vw, 140px)', height: 'auto', filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.7))' }}
         />
         {blocks.length > 0 && (
           <span style={{ color: 'rgba(255,255,255,0.65)', fontSize: 13 }}>
@@ -167,7 +279,7 @@ export default function App() {
         )}
       </header>
 
-      {blocks.length === 0 && (
+      {blocks.length === 0 && !antiGravity && (
         <div style={{
           position: 'absolute', top: '46%', left: 0, right: 0, textAlign: 'center',
           color: 'rgba(255,255,255,0.4)', fontSize: 15, pointerEvents: 'none', letterSpacing: 0.3,
@@ -176,9 +288,8 @@ export default function App() {
         </div>
       )}
 
-      {/* Colour palette — outer wrapper is pointer-transparent so orbit gestures
-          starting in the margin areas still reach the canvas */}
-      <div style={{ position: 'absolute', bottom: 158, left: 0, right: 0, display: 'flex', justifyContent: 'center', padding: '0 10px', pointerEvents: 'none' }}>
+      {/* Colour palette */}
+      <div style={{ position: 'absolute', bottom: paletteBottom, left: 0, right: 0, display: 'flex', justifyContent: 'center', padding: '0 10px', pointerEvents: 'none' }}>
         <div style={{
           display: 'flex', gap: 7, padding: '8px 12px',
           background: 'rgba(0,0,0,0.55)', borderRadius: 28,
@@ -203,18 +314,44 @@ export default function App() {
         </div>
       </div>
 
-      {/* Action buttons — outer wrapper is pointer-transparent; each row opts back in */}
+      {/* Action buttons */}
       <div style={{
         position: 'absolute', bottom: 0, left: 0, right: 0,
         padding: '0 16px 34px', display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center',
         pointerEvents: 'none',
       }}>
+        {/* Row 1 */}
         <div style={{ display: 'flex', gap: 8, width: '100%', maxWidth: 340, pointerEvents: 'auto' }}>
           <Btn bg="#27ae60" onTap={() => { setModal('save'); setSaveName('') }} disabled={!blocks.length}>Save</Btn>
-          <Btn bg="#8e44ad" onTap={() => setModal('load')} disabled={!saveNames.length}>Load</Btn>
-          <Btn bg="#546e7a" onTap={undo} disabled={!canUndo}>↩ Undo</Btn>
+          <Btn bg="#2980b9" onTap={() => setModal('load')} disabled={!saveNames.length}>Load</Btn>
+          <Btn bg="#16a085" onTap={handleShare} disabled={!blocks.length}>Share</Btn>
+          <Btn bg="#546e7a" onTap={undo} disabled={!canUndo}>↩</Btn>
           <Btn bg="#7f8c8d" onTap={clear} disabled={!blocks.length}>Clear</Btn>
         </div>
+
+        {/* Row 2: height controls — only in anti-gravity mode */}
+        {antiGravity && (
+          <div style={{ display: 'flex', gap: 8, width: '100%', maxWidth: 340, alignItems: 'center', pointerEvents: 'auto' }}>
+            <HeightBtn onTap={() => setPlaceHeight(h => Math.max(0, h - 1))} disabled={placeHeight === 0}>−</HeightBtn>
+            <div style={{ flex: 1, textAlign: 'center', color: '#e8daef', fontSize: 13, fontWeight: 700, letterSpacing: 0.5 }}>
+              Float height: {placeHeight}
+            </div>
+            <HeightBtn onTap={() => setPlaceHeight(h => Math.min(20, h + 1))}>+</HeightBtn>
+          </div>
+        )}
+
+        {/* Row 3: anti-gravity toggle */}
+        <div style={{ width: '100%', maxWidth: 340, pointerEvents: 'auto' }}>
+          <Btn
+            bg={antiGravity ? '#8e44ad' : '#4a235a'}
+            onTap={toggleAntiGravity}
+            glow={antiGravity}
+          >
+            {antiGravity ? '🔮 Anti-Gravity ON' : '🔮 Anti-Gravity'}
+          </Btn>
+        </div>
+
+        {/* Row 4: knock down */}
         <div style={{ width: '100%', maxWidth: 340, pointerEvents: 'auto' }}>
           <Btn bg="#e74c3c" onTap={knockDown} disabled={!blocks.length} tall>💥 Knock Down</Btn>
         </div>
@@ -277,6 +414,18 @@ export default function App() {
           <Btn bg="#555" onTap={() => setModal(null)}>Close</Btn>
         </Modal>
       )}
+
+      {/* Toast */}
+      {toast && (
+        <div style={{
+          position: 'absolute', bottom: paletteBottom + 70, left: '50%', transform: 'translateX(-50%)',
+          background: 'rgba(0,0,0,0.82)', color: '#fff', padding: '10px 20px',
+          borderRadius: 20, fontSize: 14, fontWeight: 600, pointerEvents: 'none',
+          backdropFilter: 'blur(8px)', whiteSpace: 'nowrap',
+        }}>
+          {toast}
+        </div>
+      )}
     </div>
   )
 }
@@ -289,7 +438,7 @@ function Modal({ children, onClose }) {
         style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)' }}
       />
       <div style={{
-        position: 'absolute', bottom: 160, left: '50%', transform: 'translateX(-50%)',
+        position: 'absolute', bottom: 220, left: '50%', transform: 'translateX(-50%)',
         width: 'calc(100% - 32px)', maxWidth: 340,
         background: 'rgba(12,12,30,0.97)', borderRadius: 18, padding: 18,
         border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(16px)',
@@ -308,7 +457,7 @@ function ModalTitle({ children }) {
   )
 }
 
-function Btn({ bg, onTap, disabled, children, tall }) {
+function Btn({ bg, onTap, disabled, children, tall, glow }) {
   return (
     <button
       onPointerDown={disabled ? undefined : onTap}
@@ -324,10 +473,33 @@ function Btn({ bg, onTap, disabled, children, tall }) {
         fontFamily: FONT,
         cursor: disabled ? 'default' : 'pointer',
         opacity: disabled ? 0.6 : 1,
-        boxShadow: disabled ? 'none' : '0 4px 14px rgba(0,0,0,0.35)',
+        boxShadow: glow
+          ? `0 0 14px ${bg}, 0 4px 14px rgba(0,0,0,0.35)`
+          : disabled ? 'none' : '0 4px 14px rgba(0,0,0,0.35)',
         WebkitTapHighlightColor: 'transparent',
         touchAction: 'manipulation',
         userSelect: 'none',
+      }}
+    >
+      {children}
+    </button>
+  )
+}
+
+function HeightBtn({ onTap, disabled, children }) {
+  return (
+    <button
+      onPointerDown={disabled ? undefined : onTap}
+      style={{
+        width: 44, height: 40, flexShrink: 0,
+        background: disabled ? '#1e1e2e' : '#6c3483',
+        color: disabled ? '#444' : '#fff',
+        border: 'none', borderRadius: 20,
+        fontSize: 22, fontWeight: 700, lineHeight: 1,
+        fontFamily: FONT, cursor: disabled ? 'default' : 'pointer',
+        opacity: disabled ? 0.5 : 1,
+        WebkitTapHighlightColor: 'transparent',
+        touchAction: 'manipulation',
       }}
     >
       {children}

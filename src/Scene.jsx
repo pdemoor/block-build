@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useThree } from '@react-three/fiber'
 import { RigidBody, CuboidCollider } from '@react-three/rapier'
 import * as THREE from 'three'
@@ -8,8 +8,6 @@ const HALF = GRID / 2
 const BOX_GEO = new THREE.BoxGeometry(1, 1, 1)
 const EDGES_GEO = new THREE.EdgesGeometry(BOX_GEO)
 
-// Returns {t, x, y} on pointerdown, null after consumed.
-// Use to distinguish a tap (< 300ms, < 8px movement) from a drag/orbit.
 function useTap(onTap) {
   const pd = useRef(null)
   return {
@@ -36,7 +34,6 @@ function applySwipeImpulse(camera, body, swipeDx, swipeDyUp) {
   dir.y = 0
   dir.normalize()
 
-  // perpendicular (right) direction for horizontal swipe component
   const right = new THREE.Vector3()
   right.crossVectors(dir, new THREE.Vector3(0, 1, 0)).normalize()
 
@@ -50,19 +47,12 @@ function applySwipeImpulse(camera, body, swipeDx, swipeDyUp) {
     true,
   )
   body.applyTorqueImpulse(
-    {
-      x: (Math.random() - 0.5) * 12,
-      y: (Math.random() - 0.5) * 12,
-      z: (Math.random() - 0.5) * 12,
-    },
+    { x: (Math.random() - 0.5) * 12, y: (Math.random() - 0.5) * 12, z: (Math.random() - 0.5) * 12 },
     true,
   )
 }
 
-// Listens for the canvas-level pointerup/pointercancel that signals the end of
-// a swipe that started on a block (the pointer may have moved off the block mesh
-// before release, so we can't rely on Block's own onPointerUp for this case).
-function SwipeHandler({ swipeRef, orbitRef }) {
+function SwipeHandler({ swipeRef, orbitRef, onFreeBlock }) {
   const { gl, camera } = useThree()
 
   useEffect(() => {
@@ -74,13 +64,18 @@ function SwipeHandler({ swipeRef, orbitRef }) {
       if (!sw) return
 
       const dx = e.clientX - sw.x0
-      const dy = e.clientY - sw.y0   // positive = downward
+      const dy = e.clientY - sw.y0
       const dt = Date.now() - sw.t0
-      const swipeDyUp = -dy           // positive = upward swipe
+      const swipeDyUp = -dy
 
       const isSwipeUp = swipeDyUp > 30 && Math.abs(swipeDyUp) > Math.abs(dx) * 0.6 && dt < 700
 
       if (isSwipeUp && sw.rb.current) {
+        if (sw.isFixed) {
+          // Convert fixed body to dynamic before applying impulse
+          sw.rb.current.setBodyType(0, true)
+          onFreeBlock(sw.blockId)
+        }
         applySwipeImpulse(camera, sw.rb.current, dx, swipeDyUp)
       }
 
@@ -100,20 +95,26 @@ function SwipeHandler({ swipeRef, orbitRef }) {
       canvas.removeEventListener('pointerup', onUp)
       canvas.removeEventListener('pointercancel', onCancel)
     }
-  }, [gl, camera, swipeRef, orbitRef])
+  }, [gl, camera, swipeRef, orbitRef, onFreeBlock])
 
   return null
 }
 
-export default function Scene({ blocks, knockKey, onPlace, orbitRef }) {
-  // Shared ref: set when a primary pointer goes down on a block, cleared on up/cancel.
-  // { x0, y0, t0, rb } — rb is the RigidBody ref of the touched block.
+export default function Scene({ blocks, knockKey, onPlace, orbitRef, antiGravity, placeHeight, color, onFreeBlock }) {
   const swipeRef = useRef(null)
+  const [ghostGrid, setGhostGrid] = useState(null) // {x, z} or null
 
   return (
     <>
-      <SwipeHandler swipeRef={swipeRef} orbitRef={orbitRef} />
-      <Floor onPlace={onPlace} />
+      <SwipeHandler swipeRef={swipeRef} orbitRef={orbitRef} onFreeBlock={onFreeBlock} />
+      <Floor
+        onPlace={onPlace}
+        antiGravity={antiGravity}
+        placeHeight={placeHeight}
+        color={color}
+        ghostGrid={ghostGrid}
+        setGhostGrid={setGhostGrid}
+      />
       {blocks.map(block => (
         <Block
           key={block.id}
@@ -122,13 +123,16 @@ export default function Scene({ blocks, knockKey, onPlace, orbitRef }) {
           onPlace={onPlace}
           swipeRef={swipeRef}
           orbitRef={orbitRef}
+          antiGravity={antiGravity}
+          placeHeight={placeHeight}
+          setGhostGrid={setGhostGrid}
         />
       ))}
     </>
   )
 }
 
-function Floor({ onPlace }) {
+function Floor({ onPlace, antiGravity, placeHeight, color, ghostGrid, setGhostGrid }) {
   const tapPoint = useRef(null)
 
   const handlers = useTap(() => {
@@ -140,32 +144,64 @@ function Floor({ onPlace }) {
   })
 
   return (
-    <RigidBody type="fixed" friction={1}>
-      <mesh
-        receiveShadow
-        position={[0, -0.1, 0]}
-        onPointerDown={e => { tapPoint.current = e.point.clone(); handlers.onPointerDown(e) }}
-        onPointerUp={handlers.onPointerUp}
-        onPointerLeave={handlers.onPointerLeave}
-        onPointerCancel={handlers.onPointerCancel}
-      >
-        <boxGeometry args={[GRID, 0.2, GRID]} />
-        <meshStandardMaterial color="#2c3e50" roughness={0.9} metalness={0.1} />
-      </mesh>
-      <gridHelper args={[GRID, GRID, '#4a5568', '#2d3748']} position={[0, 0.01, 0]} />
-    </RigidBody>
+    <>
+      <RigidBody type="fixed" friction={1}>
+        <mesh
+          receiveShadow
+          position={[0, -0.1, 0]}
+          onPointerDown={e => { tapPoint.current = e.point.clone(); handlers.onPointerDown(e) }}
+          onPointerUp={handlers.onPointerUp}
+          onPointerLeave={e => {
+            handlers.onPointerLeave(e)
+            setGhostGrid(null)
+          }}
+          onPointerCancel={e => {
+            handlers.onPointerCancel(e)
+            setGhostGrid(null)
+          }}
+          onPointerMove={e => {
+            if (!antiGravity) { if (ghostGrid) setGhostGrid(null); return }
+            const gx = Math.round(e.point.x)
+            const gz = Math.round(e.point.z)
+            if (Math.abs(gx) < HALF && Math.abs(gz) < HALF) setGhostGrid({ x: gx, z: gz })
+          }}
+        >
+          <boxGeometry args={[GRID, 0.2, GRID]} />
+          <meshStandardMaterial color="#2c3e50" roughness={0.9} metalness={0.1} />
+        </mesh>
+        <gridHelper args={[GRID, GRID, '#4a5568', '#2d3748']} position={[0, 0.01, 0]} />
+      </RigidBody>
+
+      {/* Ghost block preview */}
+      {antiGravity && ghostGrid && (
+        <>
+          {/* Ghost block at placement height */}
+          <mesh position={[ghostGrid.x, placeHeight + 0.5, ghostGrid.z]} geometry={BOX_GEO}>
+            <meshStandardMaterial color={color} transparent opacity={0.4} depthWrite={false} />
+          </mesh>
+          {/* Vertical guide line from floor to ghost */}
+          {placeHeight > 0 && (
+            <mesh position={[ghostGrid.x, placeHeight / 2, ghostGrid.z]}>
+              <boxGeometry args={[0.05, placeHeight, 0.05]} />
+              <meshBasicMaterial color={color} transparent opacity={0.2} />
+            </mesh>
+          )}
+        </>
+      )}
+    </>
   )
 }
 
-function Block({ block, knockKey, onPlace, swipeRef, orbitRef }) {
+function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, placeHeight, setGhostGrid }) {
   const rb = useRef(null)
   const prevKnock = useRef(knockKey)
-  // Track pointer-down state locally to distinguish tap vs swipe-that-stayed-on-block
   const pdLocal = useRef(null)
 
   useEffect(() => {
     if (knockKey !== prevKnock.current && rb.current) {
       prevKnock.current = knockKey
+      // Ensure body is dynamic before applying impulse (handles fixed→dynamic transition timing)
+      try { rb.current.setBodyType(0, true) } catch {}
       rb.current.applyImpulse(
         { x: (Math.random() - 0.5) * 20, y: Math.random() * 8 + 4, z: (Math.random() - 0.5) * 20 },
         true,
@@ -180,11 +216,16 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef }) {
   function handlePointerDown(e) {
     if (!e.isPrimary) return
     e.stopPropagation()
-    // Disable orbit so this drag doesn't rotate the camera
-    if (orbitRef && orbitRef.current) orbitRef.current.enabled = false
+    if (orbitRef?.current) orbitRef.current.enabled = false
     const now = Date.now()
     pdLocal.current = { t: now, x: e.clientX, y: e.clientY }
-    swipeRef.current = { x0: e.clientX, y0: e.clientY, t0: now, rb }
+    swipeRef.current = { x0: e.clientX, y0: e.clientY, t0: now, rb, blockId: block.id, isFixed: block.isFixed }
+  }
+
+  function handlePointerMove(e) {
+    if (!antiGravity || !e.isPrimary) return
+    e.stopPropagation()
+    setGhostGrid({ x: block.gridX, z: block.gridZ })
   }
 
   function handlePointerUp(e) {
@@ -192,44 +233,38 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef }) {
     e.stopPropagation()
     const loc = pdLocal.current
     pdLocal.current = null
-
     if (!loc) return
 
     const dx = e.clientX - loc.x
     const dy = e.clientY - loc.y
     const isTap = Date.now() - loc.t < 300 && dx * dx + dy * dy < 64
 
-    // SwipeHandler will fire next (same event bubbles to canvas DOM listener),
-    // so just clear local state here. SwipeHandler handles the impulse + orbit re-enable.
-    // For taps, we also place a block — but only after SwipeHandler clears swipeRef
-    // (which happens synchronously in the same event handlers chain).
     if (isTap) {
-      // Clear swipeRef now so SwipeHandler doesn't treat this tap as a swipe
       swipeRef.current = null
-      if (orbitRef && orbitRef.current) orbitRef.current.enabled = true
+      if (orbitRef?.current) orbitRef.current.enabled = true
       onPlace(block.gridX, block.gridZ)
     }
-    // Non-tap: leave swipeRef set so SwipeHandler can evaluate it
+    // Non-tap: leave swipeRef set for SwipeHandler to evaluate
   }
 
   function handlePointerLeave(e) {
     if (!e.isPrimary) return
     pdLocal.current = null
-    // Don't clear swipeRef — the swipe may be continuing past the block edge.
-    // Don't re-enable orbit yet — SwipeHandler will do it on pointerup.
+    // Don't clear swipeRef — swipe may be continuing past the block edge
   }
 
   function handlePointerCancel(e) {
     if (!e.isPrimary) return
     pdLocal.current = null
     swipeRef.current = null
-    if (orbitRef && orbitRef.current) orbitRef.current.enabled = true
+    if (orbitRef?.current) orbitRef.current.enabled = true
   }
 
   return (
     <RigidBody
       ref={rb}
       position={block.position}
+      type={block.isFixed ? 'fixed' : 'dynamic'}
       colliders={false}
       restitution={0.3}
       friction={0.8}
@@ -242,6 +277,7 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef }) {
         receiveShadow
         geometry={BOX_GEO}
         onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerLeave={handlePointerLeave}
         onPointerCancel={handlePointerCancel}
