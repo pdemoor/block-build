@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, forwardRef } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls, Environment } from '@react-three/drei'
 import { Physics } from '@react-three/rapier'
@@ -25,6 +25,7 @@ export default function App() {
   const [modal, setModal] = useState(null) // 'save' | 'load' | null
   const [saveName, setSaveName] = useState('')
   const nextId = useRef(0)
+  const orbitRef = useRef(null)
   // ref so placement callbacks always see current color without re-creating
   const colorRef = useRef(color)
   colorRef.current = color
@@ -97,9 +98,10 @@ export default function App() {
           shadow-camera-top={14} shadow-camera-bottom={-14}
         />
         <Physics key={physicsKey} gravity={[0, -20, 0]}>
-          <Scene blocks={blocks} knockKey={knockKey} onPlace={placeBlock} />
+          <Scene blocks={blocks} knockKey={knockKey} onPlace={placeBlock} orbitRef={orbitRef} />
         </Physics>
         <OrbitControls
+          ref={orbitRef}
           enablePan={true}
           minDistance={4}
           maxDistance={30}
