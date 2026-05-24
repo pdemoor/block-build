@@ -7,7 +7,8 @@ import Scene from './Scene'
 const PALETTE = [
   '#e74c3c', '#e67e22', '#f1c40f', '#2ecc71',
   '#3498db', '#9b59b6', '#1abc9c', '#e91e63',
-  '#ecf0f1', '#95a5a6', '#34495e', '#d35400',
+  '#ecf0f1', '#95a5a6', '#34495e', 'rainbow',
+  '#D4AF37', '#C0C0C0', '#FF2A2A', '#FFB6D9',
 ]
 const LS_KEY = 'blockbuild_saves'
 const FONT = "system-ui, -apple-system, sans-serif"
@@ -303,7 +304,7 @@ export default function App() {
               key={c}
               onPointerDown={() => setColor(c)}
               style={{
-                width: 30, height: 30, borderRadius: '50%', background: c, padding: 0, flexShrink: 0,
+                width: 30, height: 30, borderRadius: '50%', background: c === 'rainbow' ? 'conic-gradient(from 0deg, #ff0000, #ff8000, #ffff00, #00cc00, #0066ff, #cc00ff, #ff0000)' : c, padding: 0, flexShrink: 0,
                 border: color === c ? '3px solid #fff' : '2px solid rgba(255,255,255,0.2)',
                 boxShadow: color === c
                   ? '0 0 0 2px rgba(255,255,255,0.35), 0 3px 8px rgba(0,0,0,0.5)'

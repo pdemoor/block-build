@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useThree } from '@react-three/fiber'
+import { useThree, useFrame } from '@react-three/fiber'
 import { RigidBody, CuboidCollider } from '@react-three/rapier'
 import * as THREE from 'three'
 
@@ -198,6 +198,17 @@ function Floor({ onPlace, antiGravity, placeHeight, color, ghostGrid, setGhostGr
   )
 }
 
+function RainbowMaterial() {
+  const ref = useRef(null)
+  useFrame(({ clock }) => {
+    if (!ref.current) return
+    const t = clock.getElapsedTime()
+    ref.current.color.setHSL(t * 0.3 % 1, 1, 0.55)
+    ref.current.emissive.setHSL((t * 0.3 + 0.5) % 1, 0.8, 0.12)
+  })
+  return <meshStandardMaterial ref={ref} roughness={0.2} metalness={0.5} emissiveIntensity={0.4} />
+}
+
 function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, placeHeight, setGhostGrid }) {
   const rb = useRef(null)
   const prevKnock = useRef(knockKey)
@@ -288,7 +299,7 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
         onPointerLeave={handlePointerLeave}
         onPointerCancel={handlePointerCancel}
       >
-        <meshStandardMaterial color={block.color} roughness={0.4} metalness={0.1} />
+        {block.color === 'rainbow' ? <RainbowMaterial /> : <meshStandardMaterial color={block.color} roughness={0.4} metalness={0.1} />}
       </mesh>
       <lineSegments geometry={EDGES_GEO}>
         <lineBasicMaterial color="#000" transparent opacity={0.15} />
