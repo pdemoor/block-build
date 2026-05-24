@@ -4,168 +4,286 @@ import { OrbitControls, Environment } from '@react-three/drei'
 import { Physics } from '@react-three/rapier'
 import Scene from './Scene'
 
-const BLOCK_SIZE = 1
-const BLOCK_COLORS = [
+const PALETTE = [
   '#e74c3c', '#e67e22', '#f1c40f', '#2ecc71',
   '#3498db', '#9b59b6', '#1abc9c', '#e91e63',
+  '#ecf0f1', '#95a5a6', '#34495e', '#d35400',
 ]
+const LS_KEY = 'blockbuild_saves'
+const FONT = "system-ui, -apple-system, sans-serif"
+
+function getSaves() {
+  try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}') } catch { return {} }
+}
 
 export default function App() {
   const [blocks, setBlocks] = useState([])
+  const [color, setColor] = useState('#3498db')
   const [knockKey, setKnockKey] = useState(0)
-  const blockCountRef = useRef(0)
+  const [physicsKey, setPhysicsKey] = useState(0)
+  const [saves, setSaves] = useState(getSaves)
+  const [modal, setModal] = useState(null) // 'save' | 'load' | null
+  const [saveName, setSaveName] = useState('')
+  const nextId = useRef(0)
+  // ref so placement callbacks always see current color without re-creating
+  const colorRef = useRef(color)
+  colorRef.current = color
 
-  const addBlock = useCallback(() => {
-    const index = blockCountRef.current
-    blockCountRef.current += 1
-    setBlocks(prev => [
-      ...prev,
-      {
-        id: index,
-        position: [0, BLOCK_SIZE * index + BLOCK_SIZE / 2 + 0.01, 0],
-        color: BLOCK_COLORS[index % BLOCK_COLORS.length],
-      },
-    ])
+  const placeBlock = useCallback((gridX, gridZ) => {
+    setBlocks(prev => {
+      const stackLevel = prev.filter(b => b.gridX === gridX && b.gridZ === gridZ).length
+      return [...prev, {
+        id: nextId.current++,
+        gridX, gridZ, stackLevel,
+        color: colorRef.current,
+        position: [gridX, stackLevel + 0.5, gridZ],
+      }]
+    })
   }, [])
 
-  const knockDown = useCallback(() => {
-    setKnockKey(k => k + 1)
-  }, [])
+  const knockDown = useCallback(() => setKnockKey(k => k + 1), [])
 
-  const reset = useCallback(() => {
+  const clear = useCallback(() => {
     setBlocks([])
-    blockCountRef.current = 0
-    setKnockKey(k => k + 1)
+    nextId.current = 0
+    setPhysicsKey(k => k + 1)
   }, [])
+
+  const handleSave = useCallback(() => {
+    const name = saveName.trim()
+    if (!name) return
+    const data = blocks.map(({ gridX, gridZ, stackLevel, color: c }) => ({ gridX, gridZ, stackLevel, color: c }))
+    const updated = { ...saves, [name]: data }
+    setSaves(updated)
+    localStorage.setItem(LS_KEY, JSON.stringify(updated))
+    setModal(null)
+    setSaveName('')
+  }, [saveName, blocks, saves])
+
+  const handleLoad = useCallback((name) => {
+    const data = saves[name]
+    if (!data) return
+    nextId.current = data.length
+    setBlocks(data.map((b, i) => ({ ...b, id: i, position: [b.gridX, b.stackLevel + 0.5, b.gridZ] })))
+    setPhysicsKey(k => k + 1)
+    setModal(null)
+  }, [saves])
+
+  const handleDelete = useCallback((name) => {
+    const updated = { ...saves }
+    delete updated[name]
+    setSaves(updated)
+    localStorage.setItem(LS_KEY, JSON.stringify(updated))
+    if (!Object.keys(updated).length) setModal(null)
+  }, [saves])
+
+  const saveNames = Object.keys(saves)
 
   return (
-    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+    <div style={{ width: '100%', height: '100%', position: 'relative', fontFamily: FONT }}>
       <Canvas
         shadows
-        camera={{ position: [6, 6, 10], fov: 50, near: 0.1, far: 200 }}
+        camera={{ position: [8, 8, 12], fov: 50, near: 0.1, far: 200 }}
         gl={{ antialias: true, powerPreference: 'high-performance' }}
         style={{ background: 'linear-gradient(to bottom, #1a1a2e 0%, #16213e 60%, #0f3460 100%)' }}
       >
         <ambientLight intensity={0.6} />
         <directionalLight
-          position={[8, 12, 8]}
-          intensity={1.2}
-          castShadow
+          position={[8, 12, 8]} intensity={1.2} castShadow
           shadow-mapSize={[1024, 1024]}
-          shadow-camera-near={0.1}
-          shadow-camera-far={50}
-          shadow-camera-left={-10}
-          shadow-camera-right={10}
-          shadow-camera-top={10}
-          shadow-camera-bottom={-10}
+          shadow-camera-near={0.1} shadow-camera-far={60}
+          shadow-camera-left={-14} shadow-camera-right={14}
+          shadow-camera-top={14} shadow-camera-bottom={-14}
         />
-        <Physics gravity={[0, -20, 0]}>
-          <Scene blocks={blocks} knockKey={knockKey} />
+        <Physics key={physicsKey} gravity={[0, -20, 0]}>
+          <Scene blocks={blocks} knockKey={knockKey} onPlace={placeBlock} />
         </Physics>
         <OrbitControls
           enablePan={false}
           minDistance={4}
-          maxDistance={25}
+          maxDistance={30}
           maxPolarAngle={Math.PI / 2 - 0.05}
-          touches={{ ONE: 1, TWO: 2 }}
           makeDefault
         />
         <Environment preset="city" />
       </Canvas>
 
-      <UI
-        blockCount={blocks.length}
-        onAdd={addBlock}
-        onKnock={knockDown}
-        onReset={reset}
-      />
+      {/* Header */}
+      <header style={{
+        position: 'absolute', top: 0, left: 0, right: 0,
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        padding: '14px 18px', pointerEvents: 'none',
+      }}>
+        <span style={{ color: '#fff', fontSize: 22, fontWeight: 800, letterSpacing: 2, textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>
+          BLOCK BUILD
+        </span>
+        {blocks.length > 0 && (
+          <span style={{ color: 'rgba(255,255,255,0.65)', fontSize: 13 }}>
+            {blocks.length} block{blocks.length !== 1 ? 's' : ''}
+          </span>
+        )}
+      </header>
+
+      {blocks.length === 0 && (
+        <div style={{
+          position: 'absolute', top: '46%', left: 0, right: 0, textAlign: 'center',
+          color: 'rgba(255,255,255,0.4)', fontSize: 15, pointerEvents: 'none', letterSpacing: 0.3,
+        }}>
+          Tap the floor to place a block
+        </div>
+      )}
+
+      {/* Colour palette */}
+      <div style={{ position: 'absolute', bottom: 148, left: 0, right: 0, display: 'flex', justifyContent: 'center', padding: '0 10px' }}>
+        <div style={{
+          display: 'flex', gap: 7, padding: '8px 12px',
+          background: 'rgba(0,0,0,0.55)', borderRadius: 28,
+          backdropFilter: 'blur(10px)',
+          flexWrap: 'wrap', justifyContent: 'center', maxWidth: 340,
+        }}>
+          {PALETTE.map(c => (
+            <button
+              key={c}
+              onPointerDown={() => setColor(c)}
+              style={{
+                width: 30, height: 30, borderRadius: '50%', background: c, padding: 0, flexShrink: 0,
+                border: color === c ? '3px solid #fff' : '2px solid rgba(255,255,255,0.2)',
+                boxShadow: color === c
+                  ? '0 0 0 2px rgba(255,255,255,0.35), 0 3px 8px rgba(0,0,0,0.5)'
+                  : '0 2px 4px rgba(0,0,0,0.3)',
+                cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
+              }}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Action buttons */}
+      <div style={{
+        position: 'absolute', bottom: 0, left: 0, right: 0,
+        padding: '0 16px 34px', display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center',
+      }}>
+        <div style={{ display: 'flex', gap: 8, width: '100%', maxWidth: 340 }}>
+          <Btn bg="#27ae60" onTap={() => { setModal('save'); setSaveName('') }} disabled={!blocks.length}>Save</Btn>
+          <Btn bg="#8e44ad" onTap={() => setModal('load')} disabled={!saveNames.length}>Load</Btn>
+          <Btn bg="#7f8c8d" onTap={clear} disabled={!blocks.length}>Clear</Btn>
+        </div>
+        <div style={{ width: '100%', maxWidth: 340 }}>
+          <Btn bg="#e74c3c" onTap={knockDown} disabled={!blocks.length} tall>💥 Knock Down</Btn>
+        </div>
+      </div>
+
+      {/* Save modal */}
+      {modal === 'save' && (
+        <Modal onClose={() => setModal(null)}>
+          <ModalTitle>Name this wall</ModalTitle>
+          <input
+            autoFocus value={saveName}
+            onChange={e => setSaveName(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleSave()}
+            placeholder="e.g. My Castle"
+            style={{
+              width: '100%', padding: '10px 14px', borderRadius: 10,
+              border: 'none', fontSize: 16, background: '#fff',
+              marginBottom: 12, boxSizing: 'border-box', fontFamily: FONT,
+            }}
+          />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Btn bg="#27ae60" onTap={handleSave} disabled={!saveName.trim()}>Save</Btn>
+            <Btn bg="#555" onTap={() => setModal(null)}>Cancel</Btn>
+          </div>
+        </Modal>
+      )}
+
+      {/* Load modal */}
+      {modal === 'load' && (
+        <Modal onClose={() => setModal(null)}>
+          <ModalTitle>Saved walls</ModalTitle>
+          <div style={{ maxHeight: 220, overflowY: 'auto', marginBottom: 10 }}>
+            {saveNames.map(name => (
+              <div key={name} style={{ display: 'flex', gap: 6, marginBottom: 7 }}>
+                <button
+                  onPointerDown={() => handleLoad(name)}
+                  style={{
+                    flex: 1, padding: '10px 12px', background: '#2980b9', color: '#fff',
+                    border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 600,
+                    fontFamily: FONT, cursor: 'pointer', textAlign: 'left',
+                    WebkitTapHighlightColor: 'transparent',
+                  }}
+                >
+                  {name}
+                  <span style={{ opacity: 0.6, fontSize: 11, marginLeft: 6 }}>
+                    {saves[name].length} block{saves[name].length !== 1 ? 's' : ''}
+                  </span>
+                </button>
+                <button
+                  onPointerDown={() => handleDelete(name)}
+                  style={{
+                    padding: '10px 13px', background: '#c0392b', color: '#fff',
+                    border: 'none', borderRadius: 10, cursor: 'pointer',
+                    fontFamily: FONT, WebkitTapHighlightColor: 'transparent',
+                  }}
+                >✕</button>
+              </div>
+            ))}
+          </div>
+          <Btn bg="#555" onTap={() => setModal(null)}>Close</Btn>
+        </Modal>
+      )}
     </div>
   )
 }
 
-function UI({ blockCount, onAdd, onKnock, onReset }) {
+function Modal({ children, onClose }) {
   return (
     <>
-      {/* Title */}
+      <div
+        onPointerDown={onClose}
+        style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)' }}
+      />
       <div style={{
-        position: 'absolute',
-        top: 16,
-        left: 0,
-        right: 0,
-        textAlign: 'center',
-        color: '#fff',
-        fontFamily: "'Segoe UI', system-ui, sans-serif",
-        pointerEvents: 'none',
+        position: 'absolute', bottom: 150, left: '50%', transform: 'translateX(-50%)',
+        width: 'calc(100% - 32px)', maxWidth: 340,
+        background: 'rgba(12,12,30,0.97)', borderRadius: 18, padding: 18,
+        border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(16px)',
       }}>
-        <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: 2, textShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>
-          BLOCK BUILD
-        </div>
-        {blockCount > 0 && (
-          <div style={{ fontSize: 14, opacity: 0.7, marginTop: 2 }}>
-            {blockCount} block{blockCount !== 1 ? 's' : ''}
-          </div>
-        )}
-      </div>
-
-      {/* Bottom buttons */}
-      <div style={{
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        padding: '0 24px 40px',
-        gap: 12,
-      }}>
-        <button
-          onPointerDown={onAdd}
-          style={buttonStyle('#3498db', '#2980b9', 64, 22)}
-        >
-          + Add Block
-        </button>
-        <div style={{ display: 'flex', gap: 12, width: '100%', maxWidth: 320 }}>
-          <button
-            onPointerDown={onKnock}
-            disabled={blockCount === 0}
-            style={buttonStyle('#e74c3c', '#c0392b', 48, 16, blockCount === 0, true)}
-          >
-            Knock Down
-          </button>
-          <button
-            onPointerDown={onReset}
-            disabled={blockCount === 0}
-            style={buttonStyle('#7f8c8d', '#636e72', 48, 16, blockCount === 0, true)}
-          >
-            Reset
-          </button>
-        </div>
+        {children}
       </div>
     </>
   )
 }
 
-function buttonStyle(bg, activeBg, height, fontSize, disabled = false, half = false) {
-  return {
-    height,
-    width: half ? undefined : '100%',
-    flex: half ? 1 : undefined,
-    maxWidth: half ? undefined : 320,
-    background: disabled ? '#444' : bg,
-    color: disabled ? '#888' : '#fff',
-    border: 'none',
-    borderRadius: height / 2,
-    fontSize,
-    fontWeight: 700,
-    fontFamily: "'Segoe UI', system-ui, sans-serif",
-    letterSpacing: 0.5,
-    cursor: disabled ? 'not-allowed' : 'pointer',
-    boxShadow: disabled ? 'none' : '0 4px 16px rgba(0,0,0,0.4)',
-    transition: 'transform 0.1s, opacity 0.1s',
-    WebkitTapHighlightColor: 'transparent',
-    touchAction: 'manipulation',
-    userSelect: 'none',
-    opacity: disabled ? 0.5 : 1,
-  }
+function ModalTitle({ children }) {
+  return (
+    <div style={{ color: '#fff', fontWeight: 700, fontSize: 16, marginBottom: 12 }}>
+      {children}
+    </div>
+  )
+}
+
+function Btn({ bg, onTap, disabled, children, tall }) {
+  return (
+    <button
+      onPointerDown={disabled ? undefined : onTap}
+      style={{
+        flex: 1,
+        height: tall ? 54 : 44,
+        background: disabled ? '#1e1e2e' : bg,
+        color: disabled ? '#444' : '#fff',
+        border: 'none',
+        borderRadius: tall ? 27 : 22,
+        fontSize: tall ? 18 : 14,
+        fontWeight: 700,
+        fontFamily: FONT,
+        cursor: disabled ? 'default' : 'pointer',
+        opacity: disabled ? 0.6 : 1,
+        boxShadow: disabled ? 'none' : '0 4px 14px rgba(0,0,0,0.35)',
+        WebkitTapHighlightColor: 'transparent',
+        touchAction: 'manipulation',
+        userSelect: 'none',
+      }}
+    >
+      {children}
+    </button>
+  )
 }
