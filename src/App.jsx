@@ -5,11 +5,12 @@ import { Physics } from '@react-three/rapier'
 import Scene from './Scene'
 
 const PALETTE = [
-  '#e74c3c', '#e67e22', '#f1c40f', '#2ecc71',
-  '#3498db', '#9b59b6', '#1abc9c', '#e91e63',
-  '#ecf0f1', '#95a5a6', '#34495e', 'rainbow',
-  '#D4AF37', '#C0C0C0', '#FF2A2A', '#FFB6D9',
-  '#8B5A2B', 'glitter',
+  '#e74c3c', '#e67e22', '#FFE600', '#2ecc71',   // 0-3  red, orange, neon-yellow, green
+  '#3498db', '#9b59b6', '#1abc9c', '#FF2DAA',   // 4-7  blue, purple, aqua, arcade-pink
+  '#ecf0f1', '#95a5a6', '#34495e', 'rainbow',   // 8-11 white, silver, slate, rainbow
+  '#D4AF37', '#C0C0C0', '#FF2A2A', '#FFB6D9',   // 12-15 gold, silver, bright-red, light-pink
+  '#8B5A2B', 'glitter',                           // 16-17 brown, glitter
+  '#7CFF00', '#7DF9FF', '#111111',               // 18-20 lime, ice-cyan, deep-black (NEW)
 ]
 const LS_KEY = 'blockbuild_saves'
 const LS_AUTOSAVE = 'blockbuild_autosave'
@@ -17,9 +18,16 @@ const FONT = "system-ui, -apple-system, sans-serif"
 const MAX_HISTORY = 30
 
 function swatchGlow(c) {
-  if (c === 'rainbow') return 'rgba(255,200,100,0.55)'
-  if (c === 'glitter') return 'rgba(180,210,250,0.55)'
-  return `${c}88`
+  if (c === 'rainbow') return 'rgba(255,200,80,0.70)'
+  if (c === 'glitter') return 'rgba(180,215,255,0.68)'
+  if (c === '#111111') return 'rgba(160,180,220,0.42)'  // black → cool silver glow
+  if (c === '#FFE600') return 'rgba(255,230,0,0.75)'
+  if (c === '#7CFF00') return 'rgba(124,255,0,0.75)'
+  if (c === '#7DF9FF') return 'rgba(125,249,255,0.72)'
+  if (c === '#FF2DAA') return 'rgba(255,45,170,0.75)'
+  if (c === '#ecf0f1') return 'rgba(236,240,241,0.48)'
+  if (c === '#D4AF37') return 'rgba(212,175,55,0.78)'
+  return `${c}b0`   // default: 69% alpha (up from 53%)
 }
 
 function getSaves() {
@@ -377,11 +385,15 @@ export default function App() {
                   ? 'conic-gradient(from 0deg, #ff0000, #ff8000, #ffff00, #00cc00, #0066ff, #cc00ff, #ff0000)'
                   : c === 'glitter'
                   ? 'radial-gradient(circle at 30% 35%, #fff 0%, #e0e8ff 25%, #a0b0d0 55%, #c8d8f0 80%, #fff 100%)'
+                  : c === '#D4AF37'
+                  ? 'radial-gradient(circle at 32% 28%, #f7e87a 0%, #D4AF37 50%, #9a7810 100%)'
+                  : c === '#111111'
+                  ? 'radial-gradient(circle at 32% 28%, #484848 0%, #1c1c1c 55%, #040404 100%)'
                   : c,
                 padding: 0, flexShrink: 0,
                 border: color === c ? '2.5px solid #fff' : '1.5px solid rgba(255,255,255,0.18)',
                 boxShadow: color === c
-                  ? `0 0 0 2px ${swatchGlow(c)}, 0 0 10px ${swatchGlow(c)}, 0 2px 6px rgba(0,0,0,0.5)`
+                  ? `0 0 0 3px ${swatchGlow(c)}, 0 0 16px ${swatchGlow(c)}, 0 2px 8px rgba(0,0,0,0.6)`
                   : '0 1px 3px rgba(0,0,0,0.3)',
                 cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
                 transform: color === c ? undefined : 'scale(1)',

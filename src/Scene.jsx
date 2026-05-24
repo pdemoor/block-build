@@ -307,6 +307,28 @@ function Floor({ onPlace, antiGravity, placeHeight, color, ghostGrid, setGhostGr
   )
 }
 
+// Polished metallic gold — high metalness + optional float shimmer
+function GoldMaterial({ isFixed }) {
+  const ref = useRef(null)
+  useFrame(({ clock }) => {
+    if (!ref.current || !isFixed) return
+    const t = clock.getElapsedTime()
+    ref.current.emissiveIntensity = 0.08 + Math.sin(t * 2.1) * 0.06 + Math.sin(t * 8.4) * 0.02
+  })
+  return <meshStandardMaterial ref={ref} color="#D4AF37" roughness={0.14} metalness={0.90} emissive="#D4AF37" emissiveIntensity={isFixed ? 0.08 : 0} />
+}
+
+// Lacquered gloss black — ultra-low roughness + cool blue float glow
+function BlackMaterial({ isFixed }) {
+  const ref = useRef(null)
+  useFrame(({ clock }) => {
+    if (!ref.current || !isFixed) return
+    const t = clock.getElapsedTime()
+    ref.current.emissiveIntensity = 0.05 + Math.sin(t * 2.1) * 0.04 + Math.sin(t * 8.4) * 0.015
+  })
+  return <meshStandardMaterial ref={ref} color="#111111" roughness={0.06} metalness={0.92} emissive="#6090ff" emissiveIntensity={isFixed ? 0.05 : 0} />
+}
+
 function GlitterMaterial() {
   const ref = useRef(null)
   useFrame(({ clock }) => {
@@ -515,6 +537,10 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
           ? <RainbowMaterial />
           : block.color === 'glitter'
           ? <GlitterMaterial />
+          : block.color === '#D4AF37'
+          ? <GoldMaterial isFixed={block.isFixed} />
+          : block.color === '#111111'
+          ? <BlackMaterial isFixed={block.isFixed} />
           : block.isFixed
           ? <FixedBlockMaterial color={block.color} />
           : <meshStandardMaterial color={block.color} roughness={0.25} metalness={0.0} />}
