@@ -168,7 +168,7 @@ function Floor({ onPlace, antiGravity, placeHeight, color, ghostGrid, setGhostGr
           }}
         >
           <boxGeometry args={[GRID, 0.2, GRID]} />
-          <meshStandardMaterial color="#2c3e50" roughness={0.9} metalness={0.1} />
+          <meshStandardMaterial color="#2c3e50" roughness={0.9} metalness={0.1} transparent opacity={0.55} depthWrite={false} />
         </mesh>
         <gridHelper args={[GRID, GRID, '#4a5568', '#2d3748']} position={[0, 0.01, 0]} />
       </RigidBody>
