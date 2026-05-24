@@ -282,13 +282,23 @@ function Floor({ onPlace, antiGravity, placeHeight, color, ghostGrid, setGhostGr
           }}
         >
           <boxGeometry args={[GRID, 0.2, GRID]} />
-          <meshStandardMaterial color="#080f1c" roughness={0.88} metalness={0.30} emissive="#030609" emissiveIntensity={0.18} />
+          <meshStandardMaterial
+            color="#0a1520" roughness={0.88} metalness={0.22}
+            emissive="#050a14" emissiveIntensity={0.20}
+            transparent opacity={0.78} depthWrite={false}
+          />
         </mesh>
         {/* Fine 1-unit grid — very subtle */}
         <gridHelper args={[GRID, GRID, '#0d1e32', '#08121e']} position={[0, 0.01, 0]} />
         {/* Major 4-unit grid — slightly brighter for orientation */}
         <gridHelper args={[GRID, 6, '#18304e', '#18304e']} position={[0, 0.013, 0]} />
       </RigidBody>
+
+      {/* Dark void plane — falling blocks drift into atmospheric darkness */}
+      <mesh position={[0, -2.5, 0]} rotation={[-Math.PI / 2, 0, 0]} raycast={() => null}>
+        <planeGeometry args={[GRID * 2, GRID * 2]} />
+        <meshBasicMaterial color="#020508" transparent opacity={0.52} depthWrite={false} />
+      </mesh>
 
       {antiGravity && ghostGrid && (
         <GhostBlock x={ghostGrid.x} z={ghostGrid.z} placeHeight={placeHeight} color={color} />
