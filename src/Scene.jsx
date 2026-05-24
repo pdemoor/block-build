@@ -210,7 +210,7 @@ function BreathingLight() {
   return <pointLight ref={ref} position={[2, 20, 3]} color="#1c3a6a" intensity={0.12} />
 }
 
-export default function Scene({ blocks, knockKey, onPlace, orbitRef, antiGravity, placeHeight, color, onFreeBlock }) {
+export default function Scene({ blocks, knockKey, onPlace, orbitRef, antiGravity, placeHeight, color, isRandom, onFreeBlock }) {
   const swipeRef = useRef(null)
   const [ghostGrid, setGhostGrid] = useState(null) // {x, z} or null
 
@@ -226,6 +226,7 @@ export default function Scene({ blocks, knockKey, onPlace, orbitRef, antiGravity
         antiGravity={antiGravity}
         placeHeight={placeHeight}
         color={color}
+        isRandom={isRandom}
         ghostGrid={ghostGrid}
         setGhostGrid={setGhostGrid}
       />
@@ -246,7 +247,7 @@ export default function Scene({ blocks, knockKey, onPlace, orbitRef, antiGravity
   )
 }
 
-function Floor({ onPlace, antiGravity, placeHeight, color, ghostGrid, setGhostGrid }) {
+function Floor({ onPlace, antiGravity, placeHeight, color, isRandom, ghostGrid, setGhostGrid }) {
   const tapPoint = useRef(null)
 
   const handlers = useTap(() => {
@@ -300,7 +301,7 @@ function Floor({ onPlace, antiGravity, placeHeight, color, ghostGrid, setGhostGr
         <meshBasicMaterial color="#020508" transparent opacity={0.52} depthWrite={false} />
       </mesh>
 
-      {antiGravity && ghostGrid && (
+      {antiGravity && ghostGrid && !isRandom && (
         <GhostBlock x={ghostGrid.x} z={ghostGrid.z} placeHeight={placeHeight} color={color} />
       )}
     </>

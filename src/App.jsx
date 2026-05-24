@@ -113,6 +113,7 @@ export default function App() {
     return []
   })
   const [color, setColor] = useState('#3498db')
+  const [isRandom, setIsRandom] = useState(false)
   const [knockKey, setKnockKey] = useState(0)
   const [physicsKey, setPhysicsKey] = useState(0)
   const [saves, setSaves] = useState(getSaves)
@@ -126,6 +127,8 @@ export default function App() {
   // Refs so callbacks always see current values
   const colorRef = useRef(color)
   colorRef.current = color
+  const isRandomRef = useRef(isRandom)
+  isRandomRef.current = isRandom
   const blocksRef = useRef(blocks)
   blocksRef.current = blocks
   const antiGravityRef = useRef(antiGravity)
@@ -162,7 +165,9 @@ export default function App() {
     pushHistory(blocksRef.current, 'place')
     const isAG = antiGravityRef.current
     const height = placeHeightRef.current
-    const col = colorRef.current
+    const col = isRandomRef.current
+      ? PALETTE[Math.floor(Math.random() * PALETTE.length)]
+      : colorRef.current
     setBlocks(prev => {
       const stackLevel = isAG
         ? height
@@ -307,6 +312,7 @@ export default function App() {
             antiGravity={antiGravity}
             placeHeight={placeHeight}
             color={color}
+            isRandom={isRandom}
             onFreeBlock={freeBlock}
           />
         </Physics>
@@ -377,8 +383,8 @@ export default function App() {
           {PALETTE.map(c => (
             <button
               key={c}
-              className={`bb-swatch${color === c ? ' bb-swatch-selected' : ''}`}
-              onPointerDown={() => setColor(c)}
+              className={`bb-swatch${!isRandom && color === c ? ' bb-swatch-selected' : ''}`}
+              onPointerDown={() => { setColor(c); setIsRandom(false) }}
               style={{
                 width: 28, height: 28, borderRadius: '50%',
                 background: c === 'rainbow'
@@ -391,15 +397,34 @@ export default function App() {
                   ? 'radial-gradient(circle at 32% 28%, #484848 0%, #1c1c1c 55%, #040404 100%)'
                   : c,
                 padding: 0, flexShrink: 0,
-                border: color === c ? '2.5px solid #fff' : '1.5px solid rgba(255,255,255,0.18)',
-                boxShadow: color === c
+                border: !isRandom && color === c ? '2.5px solid #fff' : '1.5px solid rgba(255,255,255,0.18)',
+                boxShadow: !isRandom && color === c
                   ? `0 0 0 3px ${swatchGlow(c)}, 0 0 16px ${swatchGlow(c)}, 0 2px 8px rgba(0,0,0,0.6)`
                   : '0 1px 3px rgba(0,0,0,0.3)',
                 cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
-                transform: color === c ? undefined : 'scale(1)',
+                transform: !isRandom && color === c ? undefined : 'scale(1)',
               }}
             />
           ))}
+          {/* Random colour mode — each placed block picks a random palette colour */}
+          <button
+            className={`bb-swatch${isRandom ? ' bb-swatch-selected' : ''}`}
+            onPointerDown={() => setIsRandom(r => !r)}
+            style={{
+              width: 28, height: 28, borderRadius: '50%',
+              background: 'conic-gradient(from 0deg, #e74c3c, #FFE600, #7CFF00, #3498db, #9b59b6, #FF2DAA, #e74c3c)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 12, fontWeight: 900, lineHeight: 1,
+              color: 'rgba(255,255,255,0.92)', textShadow: '0 1px 3px rgba(0,0,0,0.9)',
+              padding: 0, flexShrink: 0,
+              border: isRandom ? '2.5px solid #fff' : '1.5px solid rgba(255,255,255,0.25)',
+              boxShadow: isRandom
+                ? '0 0 0 3px rgba(255,255,255,0.55), 0 0 18px rgba(255,255,255,0.40), 0 2px 8px rgba(0,0,0,0.6)'
+                : '0 1px 3px rgba(0,0,0,0.3)',
+              cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
+              transform: isRandom ? undefined : 'scale(1)',
+            }}
+          >?</button>
         </div>
 
         {/* Float height row — only visible in float mode */}
