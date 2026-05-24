@@ -200,6 +200,18 @@ function Floor({ onPlace, antiGravity, placeHeight, color, ghostGrid, setGhostGr
   )
 }
 
+function GlitterMaterial() {
+  const ref = useRef(null)
+  useFrame(({ clock }) => {
+    if (!ref.current) return
+    const t = clock.getElapsedTime()
+    // Product of incommensurate frequencies → pseudo-random sparkle bursts
+    const s = Math.max(0, Math.sin(t * 6.7) * Math.cos(t * 11.3) * Math.sin(t * 17.1)) * 3
+    ref.current.emissiveIntensity = s
+  })
+  return <meshStandardMaterial ref={ref} color="#D0D8F0" metalness={0.95} roughness={0.04} emissive="#ffffff" emissiveIntensity={0} />
+}
+
 function RainbowMaterial() {
   const ref = useRef(null)
   useFrame(({ clock }) => {
@@ -302,7 +314,7 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
         onPointerLeave={handlePointerLeave}
         onPointerCancel={handlePointerCancel}
       >
-        {block.color === 'rainbow' ? <RainbowMaterial /> : <meshStandardMaterial color={block.color} roughness={0.4} metalness={0.1} />}
+        {block.color === 'rainbow' ? <RainbowMaterial /> : block.color === 'glitter' ? <GlitterMaterial /> : <meshStandardMaterial color={block.color} roughness={0.4} metalness={0.1} />}
       </mesh>
       <lineSegments geometry={EDGES_GEO}>
         <lineBasicMaterial color="#000" transparent opacity={0.15} />

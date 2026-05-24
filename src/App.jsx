@@ -9,6 +9,7 @@ const PALETTE = [
   '#3498db', '#9b59b6', '#1abc9c', '#e91e63',
   '#ecf0f1', '#95a5a6', '#34495e', 'rainbow',
   '#D4AF37', '#C0C0C0', '#FF2A2A', '#FFB6D9',
+  '#8B5A2B', 'glitter',
 ]
 const LS_KEY = 'blockbuild_saves'
 const FONT = "system-ui, -apple-system, sans-serif"
@@ -19,8 +20,8 @@ function getSaves() {
 }
 
 // ---- Compact binary share encoding ----
-// Each block = 20 bits packed into 3 bytes:
-//   [gridX+12 : 5][gridZ+12 : 5][stackLevel : 5][colorIdx : 4][isFixed : 1]
+// Each block = 21 bits packed into 3 bytes:
+//   [gridX+12 : 5][gridZ+12 : 5][stackLevel : 5][colorIdx : 5][isFixed : 1]
 function encodeDesign(blocks) {
   const buf = new Uint8Array(blocks.length * 3)
   blocks.forEach((b, i) => {
@@ -29,7 +30,7 @@ function encodeDesign(blocks) {
     const sl = Math.max(0, Math.min(31, b.stackLevel))
     const ci = Math.max(0, PALETTE.indexOf(b.color))
     const fx = b.isFixed ? 1 : 0
-    const bits = (gx << 15) | (gz << 10) | (sl << 5) | (ci << 1) | fx
+    const bits = (gx << 16) | (gz << 11) | (sl << 6) | (ci << 1) | fx
     buf[i * 3]     = (bits >> 16) & 0xFF
     buf[i * 3 + 1] = (bits >> 8)  & 0xFF
     buf[i * 3 + 2] =  bits        & 0xFF
@@ -47,10 +48,10 @@ function decodeDesign(str) {
     const bits = (bin.charCodeAt(i * 3) << 16) |
                  (bin.charCodeAt(i * 3 + 1) << 8) |
                   bin.charCodeAt(i * 3 + 2)
-    const gx = ((bits >> 15) & 0x1F) - 12
-    const gz = ((bits >> 10) & 0x1F) - 12
-    const sl =  (bits >> 5)  & 0x1F
-    const ci =  (bits >> 1)  & 0x0F
+    const gx = ((bits >> 16) & 0x1F) - 12
+    const gz = ((bits >> 11) & 0x1F) - 12
+    const sl =  (bits >> 6)  & 0x1F
+    const ci =  (bits >> 1)  & 0x1F
     const fx =   bits        & 1
     blocks.push({
       id: i,
@@ -308,7 +309,7 @@ export default function App() {
               onPointerDown={() => setColor(c)}
               style={{
                 width: 30, height: 30, borderRadius: '50%',
-                background: c === 'rainbow' ? 'conic-gradient(from 0deg, #ff0000, #ff8000, #ffff00, #00cc00, #0066ff, #cc00ff, #ff0000)' : c,
+                background: c === 'rainbow' ? 'conic-gradient(from 0deg, #ff0000, #ff8000, #ffff00, #00cc00, #0066ff, #cc00ff, #ff0000)' : c === 'glitter' ? 'radial-gradient(circle at 30% 35%, #fff 0%, #e0e8ff 25%, #a0b0d0 55%, #c8d8f0 80%, #fff 100%)' : c,
                 padding: 0, flexShrink: 0,
                 border: color === c ? '3px solid #fff' : '2px solid rgba(255,255,255,0.2)',
                 boxShadow: color === c
