@@ -123,6 +123,7 @@ export default function App() {
   const [antiGravity, setAntiGravity] = useState(false)
   const [placeHeight, setPlaceHeight] = useState(0)
   const [toast, setToast] = useState(null)
+  const [isPhotoMode, setIsPhotoMode] = useState(false)
 
   // Refs so callbacks always see current values
   const colorRef = useRef(color)
@@ -137,6 +138,7 @@ export default function App() {
   placeHeightRef.current = placeHeight
   const historyRef = useRef([])
   const toastTimer = useRef(null)
+  const glRef = useRef(null)
 
   useEffect(() => {
     if (!blocks.length) {
@@ -225,6 +227,23 @@ export default function App() {
     }
   }, [])
 
+  const handleScreenshot = useCallback(() => {
+    const canvas = glRef.current?.domElement
+    if (!canvas) return
+    canvas.toBlob(blob => {
+      if (!blob) return
+      const file = new File([blob], 'block-build.png', { type: 'image/png' })
+      if (navigator.canShare?.({ files: [file] })) {
+        navigator.share({ files: [file], title: 'Block Build' }).catch(() => {})
+      } else {
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url; a.download = 'block-build.png'; a.click()
+        setTimeout(() => URL.revokeObjectURL(url), 60000)
+      }
+    }, 'image/png')
+  }, [])
+
   const handleSave = useCallback(() => {
     const name = saveName.trim()
     if (!name) return
@@ -283,14 +302,15 @@ export default function App() {
         }
         .bb-swatch-selected { animation: bbSwatchPulse 1.9s ease-in-out infinite; }
         .bb-swatch-selected:active { animation: none; transform: scale(0.80) !important; transition: transform 0s !important; }
+        @keyframes bbFadeIn { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: scale(1); } }
       `}</style>
 
       <Canvas
         shadows="soft"
         camera={{ position: [8, 8, 12], fov: 50, near: 0.1, far: 200 }}
-        gl={{ antialias: true, powerPreference: 'high-performance' }}
+        gl={{ antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: true }}
         style={{ background: 'linear-gradient(180deg, #020610 0%, #050c1c 28%, #071228 58%, #050c1c 84%, #020407 100%)', touchAction: 'none' }}
-        onCreated={({ gl }) => { gl.domElement.style.touchAction = 'none' }}
+        onCreated={({ gl }) => { gl.domElement.style.touchAction = 'none'; glRef.current = gl }}
       >
         <fog attach="fog" args={['#060b18', 58, 100]} />
         <ambientLight intensity={0.32} />
@@ -314,6 +334,7 @@ export default function App() {
             color={color}
             isRandom={isRandom}
             onFreeBlock={freeBlock}
+            isPhotoMode={isPhotoMode}
           />
         </Physics>
         <OrbitControls
@@ -331,6 +352,8 @@ export default function App() {
       <div style={{
         position: 'absolute', inset: 0, pointerEvents: 'none',
         background: 'radial-gradient(ellipse at 50% 36%, transparent 42%, rgba(3,5,12,0.55) 70%, rgba(2,4,10,0.78) 100%)',
+        opacity: isPhotoMode ? 0 : 1,
+        transition: 'opacity 0.4s ease',
       }} />
 
       {/* Header */}
@@ -338,6 +361,9 @@ export default function App() {
         position: 'absolute', top: 0, left: 0, right: 0,
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         padding: 'calc(8px + env(safe-area-inset-top, 0px)) 18px 8px', pointerEvents: 'none',
+        opacity: isPhotoMode ? 0 : 1,
+        transform: isPhotoMode ? 'translateY(-8px)' : 'translateY(0)',
+        transition: 'opacity 0.35s ease, transform 0.35s ease',
       }}>
         <img
           src="/logo.png"
@@ -358,7 +384,7 @@ export default function App() {
         )}
       </header>
 
-      {blocks.length === 0 && !antiGravity && (
+      {blocks.length === 0 && !antiGravity && !isPhotoMode && (
         <div style={{
           position: 'absolute', top: '46%', left: 0, right: 0, textAlign: 'center',
           color: 'rgba(255,255,255,0.4)', fontSize: 15, pointerEvents: 'none', letterSpacing: 0.3,
@@ -377,6 +403,10 @@ export default function App() {
         boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), 0 -8px 32px rgba(0,0,0,0.35)',
         padding: `12px 10px calc(14px + env(safe-area-inset-bottom, 0px))`,
         display: 'flex', flexDirection: 'column', gap: 10,
+        opacity: isPhotoMode ? 0 : 1,
+        transform: isPhotoMode ? 'translateY(100%)' : 'translateY(0)',
+        transition: 'opacity 0.35s ease, transform 0.35s ease',
+        pointerEvents: isPhotoMode ? 'none' : 'auto',
       }}>
         {/* Colour palette */}
         <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -473,6 +503,7 @@ export default function App() {
           <CtrlBtn emoji="💾" label="Save"  onTap={() => { setModal('save'); setSaveName('') }}    disabled={!blocks.length} />
           <CtrlBtn emoji="📂" label="Load"  onTap={() => setModal('load')}                         disabled={!saveNames.length} />
           <CtrlBtn emoji="🔗" label="Share" onTap={handleShare}                                    disabled={!blocks.length} />
+          <CtrlBtn emoji="📷" label="Photo" onTap={() => setIsPhotoMode(true)} />
         </div>
       </div>
 
@@ -540,6 +571,47 @@ export default function App() {
           </div>
           <Btn bg="#555" onTap={() => setModal(null)}>Close</Btn>
         </Modal>
+      )}
+
+      {/* Photo mode overlay — screenshot + exit buttons */}
+      {isPhotoMode && (
+        <div style={{
+          position: 'absolute',
+          top: 'calc(14px + env(safe-area-inset-top, 0px))',
+          right: 14,
+          display: 'flex', gap: 8, zIndex: 20,
+          animation: 'bbFadeIn 0.3s ease',
+        }}>
+          <button
+            className="bb-btn"
+            onPointerDown={handleScreenshot}
+            style={{
+              width: 48, height: 48, borderRadius: 14,
+              background: 'rgba(255,255,255,0.13)',
+              backdropFilter: 'blur(14px) saturate(160%)', WebkitBackdropFilter: 'blur(14px) saturate(160%)',
+              border: '1px solid rgba(255,255,255,0.24)',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.55)',
+              fontSize: 22, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation',
+            }}
+          >📸</button>
+          <button
+            className="bb-btn"
+            onPointerDown={() => setIsPhotoMode(false)}
+            style={{
+              width: 48, height: 48, borderRadius: 14,
+              background: 'rgba(255,255,255,0.13)',
+              backdropFilter: 'blur(14px) saturate(160%)', WebkitBackdropFilter: 'blur(14px) saturate(160%)',
+              border: '1px solid rgba(255,255,255,0.24)',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.55)',
+              color: '#fff', fontSize: 18, fontWeight: 700, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation',
+              fontFamily: FONT,
+            }}
+          >✕</button>
+        </div>
       )}
 
       {/* Toast */}

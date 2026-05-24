@@ -210,7 +210,7 @@ function BreathingLight() {
   return <pointLight ref={ref} position={[2, 20, 3]} color="#1c3a6a" intensity={0.12} />
 }
 
-export default function Scene({ blocks, knockKey, onPlace, orbitRef, antiGravity, placeHeight, color, isRandom, onFreeBlock }) {
+export default function Scene({ blocks, knockKey, onPlace, orbitRef, antiGravity, placeHeight, color, isRandom, onFreeBlock, isPhotoMode }) {
   const swipeRef = useRef(null)
   const [ghostGrid, setGhostGrid] = useState(null) // {x, z} or null
 
@@ -229,6 +229,7 @@ export default function Scene({ blocks, knockKey, onPlace, orbitRef, antiGravity
         isRandom={isRandom}
         ghostGrid={ghostGrid}
         setGhostGrid={setGhostGrid}
+        isPhotoMode={isPhotoMode}
       />
       {blocks.map(block => (
         <Block
@@ -247,11 +248,11 @@ export default function Scene({ blocks, knockKey, onPlace, orbitRef, antiGravity
   )
 }
 
-function Floor({ onPlace, antiGravity, placeHeight, color, isRandom, ghostGrid, setGhostGrid }) {
+function Floor({ onPlace, antiGravity, placeHeight, color, isRandom, ghostGrid, setGhostGrid, isPhotoMode }) {
   const tapPoint = useRef(null)
 
   const handlers = useTap(() => {
-    if (!tapPoint.current) return
+    if (!tapPoint.current || isPhotoMode) return
     // Math.floor gives the cell index; block world center = index + 0.5
     const gx = Math.floor(tapPoint.current.x)
     const gz = Math.floor(tapPoint.current.z)
