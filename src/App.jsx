@@ -248,8 +248,8 @@ export default function App() {
   }, [])
 
   const saveNames = Object.keys(saves)
-  // Palette clears the button rows below it; extra height when height controls visible
-  const paletteBottom = antiGravity ? 204 : 156
+  // Panel height (px, excluding safe-area) for positioning toast and modals above panel
+  const panelH = antiGravity ? 188 : 142
 
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative', fontFamily: FONT, touchAction: 'none' }}>
@@ -300,7 +300,7 @@ export default function App() {
         <img
           src="/logo.png"
           alt="Block Build"
-          style={{ width: 'clamp(80px, 16vw, 140px)', height: 'auto', filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.7))' }}
+          style={{ width: 'clamp(56px, 11vw, 96px)', height: 'auto', filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.7))' }}
         />
         {blocks.length > 0 && (
           <span style={{ color: 'rgba(255,255,255,0.65)', fontSize: 13 }}>
@@ -318,74 +318,86 @@ export default function App() {
         </div>
       )}
 
-      {/* Colour palette */}
-      <div style={{ position: 'absolute', bottom: `calc(${paletteBottom}px + env(safe-area-inset-bottom, 0px))`, left: 0, right: 0, display: 'flex', justifyContent: 'center', padding: '0 10px', pointerEvents: 'none' }}>
-        <div style={{
-          display: 'flex', gap: 7, padding: '8px 12px',
-          background: 'rgba(0,0,0,0.55)', borderRadius: 28,
-          backdropFilter: 'blur(10px)',
-          flexWrap: 'wrap', justifyContent: 'center', maxWidth: 360,
-          pointerEvents: 'auto',
-        }}>
+      {/* Unified bottom panel */}
+      <div style={{
+        position: 'absolute', bottom: 0, left: 0, right: 0,
+        background: 'rgba(8,8,20,0.84)',
+        backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+        borderTop: '1px solid rgba(255,255,255,0.08)',
+        borderRadius: '20px 20px 0 0',
+        padding: `12px 10px calc(14px + env(safe-area-inset-bottom, 0px))`,
+        display: 'flex', flexDirection: 'column', gap: 10,
+      }}>
+        {/* Colour palette */}
+        <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
           {PALETTE.map(c => (
             <button
               key={c}
               onPointerDown={() => setColor(c)}
               style={{
-                width: 30, height: 30, borderRadius: '50%',
+                width: 28, height: 28, borderRadius: '50%',
                 background: c === 'rainbow' ? 'conic-gradient(from 0deg, #ff0000, #ff8000, #ffff00, #00cc00, #0066ff, #cc00ff, #ff0000)' : c === 'glitter' ? 'radial-gradient(circle at 30% 35%, #fff 0%, #e0e8ff 25%, #a0b0d0 55%, #c8d8f0 80%, #fff 100%)' : c,
                 padding: 0, flexShrink: 0,
-                border: color === c ? '3px solid #fff' : '2px solid rgba(255,255,255,0.2)',
+                border: color === c ? '2.5px solid #fff' : '1.5px solid rgba(255,255,255,0.18)',
                 boxShadow: color === c
-                  ? '0 0 0 2px rgba(255,255,255,0.35), 0 3px 8px rgba(0,0,0,0.5)'
-                  : '0 2px 4px rgba(0,0,0,0.3)',
+                  ? '0 0 0 2px rgba(255,255,255,0.28), 0 2px 6px rgba(0,0,0,0.5)'
+                  : '0 1px 3px rgba(0,0,0,0.3)',
                 cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
+                transform: color === c ? 'scale(1.15)' : 'scale(1)',
+                transition: 'transform 0.1s ease',
               }}
             />
           ))}
         </div>
-      </div>
 
-      {/* Bottom controls */}
-      <div style={{
-        position: 'absolute', bottom: 0, left: 0, right: 0,
-        padding: `0 16px calc(34px + env(safe-area-inset-bottom, 0px))`, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center',
-        pointerEvents: 'none',
-      }}>
-        {/* Row 1: action buttons */}
-        <div style={{ display: 'flex', gap: 6, width: '100%', maxWidth: 360, pointerEvents: 'auto' }}>
-          <Btn bg="#546e7a" onTap={undo} disabled={!canUndo}>↩ Undo</Btn>
-          <Btn bg="#7f8c8d" onTap={clear} disabled={!blocks.length}>Clear</Btn>
-          <Btn bg="#27ae60" onTap={() => { setModal('save'); setSaveName('') }} disabled={!blocks.length}>Save</Btn>
-          <Btn bg="#2980b9" onTap={() => setModal('load')} disabled={!saveNames.length}>Load</Btn>
-          <Btn bg="#16a085" onTap={handleShare} disabled={!blocks.length}>Share</Btn>
-        </div>
-
-        {/* Row 2: height controls — only in float mode */}
+        {/* Float height row — only visible in float mode */}
         {antiGravity && (
-          <div style={{ display: 'flex', gap: 8, width: '100%', maxWidth: 360, alignItems: 'center', pointerEvents: 'auto' }}>
-            <HeightBtn onTap={() => setPlaceHeight(h => Math.max(0, h - 1))} disabled={placeHeight === 0}>−</HeightBtn>
-            <div style={{ flex: 1, textAlign: 'center', color: '#e8daef', fontSize: 13, fontWeight: 700, letterSpacing: 0.5 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button
+              onPointerDown={placeHeight === 0 ? undefined : () => setPlaceHeight(h => Math.max(0, h - 1))}
+              style={{
+                width: 44, height: 36, flexShrink: 0,
+                background: placeHeight === 0 ? 'rgba(255,255,255,0.04)' : 'rgba(124,58,237,0.28)',
+                color: placeHeight === 0 ? 'rgba(255,255,255,0.2)' : '#d8b4fe',
+                border: `1px solid ${placeHeight === 0 ? 'rgba(255,255,255,0.06)' : 'rgba(124,58,237,0.45)'}`,
+                borderRadius: 8, fontSize: 20, fontWeight: 700, lineHeight: 1,
+                cursor: placeHeight === 0 ? 'default' : 'pointer',
+                WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation',
+              }}
+            >−</button>
+            <div style={{ flex: 1, textAlign: 'center', color: '#d8b4fe', fontSize: 12, fontWeight: 700, letterSpacing: 0.3 }}>
               Float height: {placeHeight}
             </div>
-            <HeightBtn onTap={() => setPlaceHeight(h => Math.min(20, h + 1))}>+</HeightBtn>
+            <button
+              onPointerDown={placeHeight === 20 ? undefined : () => setPlaceHeight(h => Math.min(20, h + 1))}
+              style={{
+                width: 44, height: 36, flexShrink: 0,
+                background: placeHeight === 20 ? 'rgba(255,255,255,0.04)' : 'rgba(124,58,237,0.28)',
+                color: placeHeight === 20 ? 'rgba(255,255,255,0.2)' : '#d8b4fe',
+                border: `1px solid ${placeHeight === 20 ? 'rgba(255,255,255,0.06)' : 'rgba(124,58,237,0.45)'}`,
+                borderRadius: 8, fontSize: 20, fontWeight: 700, lineHeight: 1,
+                cursor: placeHeight === 20 ? 'default' : 'pointer',
+                WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation',
+              }}
+            >+</button>
           </div>
         )}
 
-        {/* Row 3: mode toggles */}
-        <div style={{ display: 'flex', gap: 8, width: '100%', maxWidth: 360, pointerEvents: 'auto' }}>
-          <Btn bg="#e74c3c" onTap={knockDown} disabled={!blocks.length} tall>
-            💥 Knock Over
-          </Btn>
-          <ModeBtn active={antiGravity} onTap={toggleAntiGravity} color="#8e44ad" glow="rgba(142,68,173,0.5)">
-            🔮 Float Mode
-          </ModeBtn>
+        {/* Action buttons */}
+        <div style={{ display: 'flex', gap: 4 }}>
+          <CtrlBtn emoji="↩" label="Undo"  onTap={undo}                                            disabled={!canUndo} />
+          <CtrlBtn emoji="✕" label="Clear" onTap={clear}                                           disabled={!blocks.length} />
+          <CtrlBtn emoji="💥" label="Knock" onTap={knockDown}                                      disabled={!blocks.length} tintBg="rgba(239,68,68,0.22)" />
+          <CtrlBtn emoji="🔮" label="Float" onTap={toggleAntiGravity} active={antiGravity}         activeColor="#7c3aed" activeGlow="rgba(124,58,237,0.65)" />
+          <CtrlBtn emoji="💾" label="Save"  onTap={() => { setModal('save'); setSaveName('') }}    disabled={!blocks.length} />
+          <CtrlBtn emoji="📂" label="Load"  onTap={() => setModal('load')}                         disabled={!saveNames.length} />
+          <CtrlBtn emoji="🔗" label="Share" onTap={handleShare}                                    disabled={!blocks.length} />
         </div>
       </div>
 
       {/* Save modal */}
       {modal === 'save' && (
-        <Modal onClose={() => setModal(null)}>
+        <Modal onClose={() => setModal(null)} bottom={`calc(${panelH + 12}px + env(safe-area-inset-bottom, 0px))`}>
           <ModalTitle>Name this wall</ModalTitle>
           <input
             autoFocus value={saveName}
@@ -407,7 +419,7 @@ export default function App() {
 
       {/* Load modal */}
       {modal === 'load' && (
-        <Modal onClose={() => setModal(null)}>
+        <Modal onClose={() => setModal(null)} bottom={`calc(${panelH + 12}px + env(safe-area-inset-bottom, 0px))`}>
           <ModalTitle>Saved walls</ModalTitle>
           <div style={{ maxHeight: 220, overflowY: 'auto', marginBottom: 10 }}>
             {saveNames.map(name => (
@@ -444,7 +456,7 @@ export default function App() {
       {/* Toast */}
       {toast && (
         <div style={{
-          position: 'absolute', bottom: `calc(${paletteBottom + 70}px + env(safe-area-inset-bottom, 0px))`, left: '50%', transform: 'translateX(-50%)',
+          position: 'absolute', bottom: `calc(${panelH + 14}px + env(safe-area-inset-bottom, 0px))`, left: '50%', transform: 'translateX(-50%)',
           background: 'rgba(0,0,0,0.82)', color: '#fff', padding: '10px 20px',
           borderRadius: 20, fontSize: 14, fontWeight: 600, pointerEvents: 'none',
           backdropFilter: 'blur(8px)', whiteSpace: 'nowrap',
@@ -456,7 +468,7 @@ export default function App() {
   )
 }
 
-function Modal({ children, onClose }) {
+function Modal({ children, onClose, bottom }) {
   return (
     <>
       <div
@@ -464,7 +476,7 @@ function Modal({ children, onClose }) {
         style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)' }}
       />
       <div style={{
-        position: 'absolute', bottom: 'calc(165px + env(safe-area-inset-bottom, 0px))', left: '50%', transform: 'translateX(-50%)',
+        position: 'absolute', bottom: bottom || 'calc(154px + env(safe-area-inset-bottom, 0px))', left: '50%', transform: 'translateX(-50%)',
         width: 'calc(100% - 32px)', maxWidth: 360,
         background: 'rgba(12,12,30,0.97)', borderRadius: 18, padding: 18,
         border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(16px)',
@@ -483,28 +495,20 @@ function ModalTitle({ children }) {
   )
 }
 
-function Btn({ bg, onTap, disabled, children, tall, glow }) {
+function Btn({ bg, onTap, disabled, children }) {
   return (
     <button
       onPointerDown={disabled ? undefined : onTap}
       style={{
-        flex: 1,
-        height: tall ? 54 : 44,
+        flex: 1, height: 40,
         background: disabled ? '#1e1e2e' : bg,
-        color: disabled ? '#444' : '#fff',
-        border: 'none',
-        borderRadius: tall ? 27 : 22,
-        fontSize: tall ? 18 : 14,
-        fontWeight: 700,
-        fontFamily: FONT,
+        color: disabled ? '#555' : '#fff',
+        border: 'none', borderRadius: 10,
+        fontSize: 14, fontWeight: 700, fontFamily: FONT,
         cursor: disabled ? 'default' : 'pointer',
         opacity: disabled ? 0.6 : 1,
-        boxShadow: glow
-          ? `0 0 14px ${bg}, 0 4px 14px rgba(0,0,0,0.35)`
-          : disabled ? 'none' : '0 4px 14px rgba(0,0,0,0.35)',
         WebkitTapHighlightColor: 'transparent',
-        touchAction: 'manipulation',
-        userSelect: 'none',
+        touchAction: 'manipulation', userSelect: 'none',
       }}
     >
       {children}
@@ -512,49 +516,33 @@ function Btn({ bg, onTap, disabled, children, tall, glow }) {
   )
 }
 
-function ModeBtn({ active, onTap, color, glow, children }) {
-  return (
-    <button
-      onPointerDown={onTap}
-      style={{
-        flex: 1,
-        height: 52,
-        background: active ? color : 'rgba(255,255,255,0.07)',
-        color: active ? '#fff' : color,
-        border: active ? 'none' : `1.5px solid ${color}55`,
-        borderRadius: 26,
-        fontSize: 14,
-        fontWeight: 700,
-        fontFamily: FONT,
-        cursor: 'pointer',
-        boxShadow: active ? `0 4px 20px ${glow}` : 'none',
-        WebkitTapHighlightColor: 'transparent',
-        touchAction: 'manipulation',
-        userSelect: 'none',
-      }}
-    >
-      {children}{active ? ' ON' : ''}
-    </button>
-  )
-}
-
-function HeightBtn({ onTap, disabled, children }) {
+function CtrlBtn({ emoji, label, onTap, disabled, active, activeColor, activeGlow, tintBg }) {
+  const bg = disabled
+    ? 'rgba(255,255,255,0.04)'
+    : active && activeColor
+    ? activeColor
+    : tintBg || 'rgba(255,255,255,0.07)'
+  const shadow = active && activeGlow
+    ? `0 0 20px ${activeGlow}, inset 0 1px 0 rgba(255,255,255,0.15), 0 2px 8px rgba(0,0,0,0.4)`
+    : 'none'
   return (
     <button
       onPointerDown={disabled ? undefined : onTap}
       style={{
-        width: 44, height: 40, flexShrink: 0,
-        background: disabled ? '#1e1e2e' : '#6c3483',
-        color: disabled ? '#444' : '#fff',
-        border: 'none', borderRadius: 20,
-        fontSize: 22, fontWeight: 700, lineHeight: 1,
-        fontFamily: FONT, cursor: disabled ? 'default' : 'pointer',
-        opacity: disabled ? 0.5 : 1,
+        flex: 1, height: 44, minWidth: 0, padding: 0,
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2,
+        background: bg,
+        color: disabled ? 'rgba(255,255,255,0.22)' : '#fff',
+        border: active && activeColor ? 'none' : `1px solid ${disabled ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.11)'}`,
+        borderRadius: 10,
+        cursor: disabled ? 'default' : 'pointer',
+        boxShadow: shadow,
         WebkitTapHighlightColor: 'transparent',
-        touchAction: 'manipulation',
+        touchAction: 'manipulation', userSelect: 'none',
       }}
     >
-      {children}
+      <span style={{ fontSize: 15, lineHeight: 1 }}>{emoji}</span>
+      <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.2, lineHeight: 1, fontFamily: FONT }}>{label}</span>
     </button>
   )
 }
