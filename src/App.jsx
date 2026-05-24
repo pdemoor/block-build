@@ -16,6 +16,12 @@ const LS_AUTOSAVE = 'blockbuild_autosave'
 const FONT = "system-ui, -apple-system, sans-serif"
 const MAX_HISTORY = 30
 
+function swatchGlow(c) {
+  if (c === 'rainbow') return 'rgba(255,200,100,0.55)'
+  if (c === 'glitter') return 'rgba(180,210,250,0.55)'
+  return `${c}88`
+}
+
 function getSaves() {
   try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}') } catch { return {} }
 }
@@ -253,6 +259,13 @@ export default function App() {
 
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative', fontFamily: FONT, touchAction: 'none' }}>
+      <style>{`
+        .bb-btn { transition: transform 0.18s cubic-bezier(0.34,1.56,0.64,1); }
+        .bb-btn:active { transform: scale(0.88) !important; transition: transform 0s !important; }
+        .bb-swatch { transition: transform 0.16s cubic-bezier(0.34,1.56,0.64,1); }
+        .bb-swatch:active { transform: scale(0.80) !important; transition: transform 0s !important; }
+      `}</style>
+
       <Canvas
         shadows
         camera={{ position: [8, 8, 12], fov: 50, near: 0.1, far: 200 }}
@@ -311,7 +324,14 @@ export default function App() {
           style={{ width: 'clamp(56px, 11vw, 96px)', height: 'auto', filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.7))' }}
         />
         {blocks.length > 0 && (
-          <span style={{ color: 'rgba(255,255,255,0.65)', fontSize: 13 }}>
+          <span style={{
+            background: 'rgba(255,255,255,0.08)',
+            backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+            border: '1px solid rgba(255,255,255,0.14)',
+            color: 'rgba(255,255,255,0.88)',
+            fontSize: 12, fontWeight: 700,
+            padding: '4px 11px', borderRadius: 20, letterSpacing: 0.3,
+          }}>
             {blocks.length} block{blocks.length !== 1 ? 's' : ''}
           </span>
         )}
@@ -329,10 +349,11 @@ export default function App() {
       {/* Unified bottom panel */}
       <div style={{
         position: 'absolute', bottom: 0, left: 0, right: 0,
-        background: 'rgba(8,8,20,0.84)',
-        backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
-        borderTop: '1px solid rgba(255,255,255,0.08)',
+        background: 'linear-gradient(to bottom, rgba(12,14,30,0.78) 0%, rgba(6,8,20,0.92) 100%)',
+        backdropFilter: 'blur(24px) saturate(180%)', WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+        borderTop: '1px solid rgba(255,255,255,0.10)',
         borderRadius: '20px 20px 0 0',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), 0 -8px 32px rgba(0,0,0,0.35)',
         padding: `12px 10px calc(14px + env(safe-area-inset-bottom, 0px))`,
         display: 'flex', flexDirection: 'column', gap: 10,
       }}>
@@ -341,18 +362,22 @@ export default function App() {
           {PALETTE.map(c => (
             <button
               key={c}
+              className="bb-swatch"
               onPointerDown={() => setColor(c)}
               style={{
                 width: 28, height: 28, borderRadius: '50%',
-                background: c === 'rainbow' ? 'conic-gradient(from 0deg, #ff0000, #ff8000, #ffff00, #00cc00, #0066ff, #cc00ff, #ff0000)' : c === 'glitter' ? 'radial-gradient(circle at 30% 35%, #fff 0%, #e0e8ff 25%, #a0b0d0 55%, #c8d8f0 80%, #fff 100%)' : c,
+                background: c === 'rainbow'
+                  ? 'conic-gradient(from 0deg, #ff0000, #ff8000, #ffff00, #00cc00, #0066ff, #cc00ff, #ff0000)'
+                  : c === 'glitter'
+                  ? 'radial-gradient(circle at 30% 35%, #fff 0%, #e0e8ff 25%, #a0b0d0 55%, #c8d8f0 80%, #fff 100%)'
+                  : c,
                 padding: 0, flexShrink: 0,
                 border: color === c ? '2.5px solid #fff' : '1.5px solid rgba(255,255,255,0.18)',
                 boxShadow: color === c
-                  ? '0 0 0 2px rgba(255,255,255,0.28), 0 2px 6px rgba(0,0,0,0.5)'
+                  ? `0 0 0 2px ${swatchGlow(c)}, 0 0 10px ${swatchGlow(c)}, 0 2px 6px rgba(0,0,0,0.5)`
                   : '0 1px 3px rgba(0,0,0,0.3)',
                 cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
                 transform: color === c ? 'scale(1.15)' : 'scale(1)',
-                transition: 'transform 0.1s ease',
               }}
             />
           ))}
@@ -362,6 +387,7 @@ export default function App() {
         {antiGravity && (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <button
+              className="bb-btn"
               onPointerDown={placeHeight === 0 ? undefined : () => setPlaceHeight(h => Math.max(0, h - 1))}
               style={{
                 width: 44, height: 36, flexShrink: 0,
@@ -370,6 +396,7 @@ export default function App() {
                 border: `1px solid ${placeHeight === 0 ? 'rgba(255,255,255,0.06)' : 'rgba(124,58,237,0.45)'}`,
                 borderRadius: 8, fontSize: 20, fontWeight: 700, lineHeight: 1,
                 cursor: placeHeight === 0 ? 'default' : 'pointer',
+                boxShadow: placeHeight === 0 ? 'none' : '0 2px 8px rgba(124,58,237,0.25), inset 0 1px 0 rgba(255,255,255,0.1)',
                 WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation',
               }}
             >−</button>
@@ -377,6 +404,7 @@ export default function App() {
               Float height: {placeHeight}
             </div>
             <button
+              className="bb-btn"
               onPointerDown={placeHeight === 20 ? undefined : () => setPlaceHeight(h => Math.min(20, h + 1))}
               style={{
                 width: 44, height: 36, flexShrink: 0,
@@ -385,6 +413,7 @@ export default function App() {
                 border: `1px solid ${placeHeight === 20 ? 'rgba(255,255,255,0.06)' : 'rgba(124,58,237,0.45)'}`,
                 borderRadius: 8, fontSize: 20, fontWeight: 700, lineHeight: 1,
                 cursor: placeHeight === 20 ? 'default' : 'pointer',
+                boxShadow: placeHeight === 20 ? 'none' : '0 2px 8px rgba(124,58,237,0.25), inset 0 1px 0 rgba(255,255,255,0.1)',
                 WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation',
               }}
             >+</button>
@@ -433,11 +462,15 @@ export default function App() {
             {saveNames.map(name => (
               <div key={name} style={{ display: 'flex', gap: 6, marginBottom: 7 }}>
                 <button
+                  className="bb-btn"
                   onPointerDown={() => handleLoad(name)}
                   style={{
-                    flex: 1, padding: '10px 12px', background: '#2980b9', color: '#fff',
-                    border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 600,
-                    fontFamily: FONT, cursor: 'pointer', textAlign: 'left',
+                    flex: 1, padding: '10px 12px',
+                    background: 'rgba(41,128,185,0.35)', color: '#fff',
+                    border: '1px solid rgba(41,128,185,0.55)', borderRadius: 10,
+                    fontSize: 14, fontWeight: 600, fontFamily: FONT,
+                    cursor: 'pointer', textAlign: 'left',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1)',
                     WebkitTapHighlightColor: 'transparent',
                   }}
                 >
@@ -447,11 +480,15 @@ export default function App() {
                   </span>
                 </button>
                 <button
+                  className="bb-btn"
                   onPointerDown={() => handleDelete(name)}
                   style={{
-                    padding: '10px 13px', background: '#c0392b', color: '#fff',
-                    border: 'none', borderRadius: 10, cursor: 'pointer',
-                    fontFamily: FONT, WebkitTapHighlightColor: 'transparent',
+                    padding: '10px 13px',
+                    background: 'rgba(192,57,43,0.35)', color: '#fff',
+                    border: '1px solid rgba(192,57,43,0.55)', borderRadius: 10,
+                    cursor: 'pointer', fontFamily: FONT,
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1)',
+                    WebkitTapHighlightColor: 'transparent',
                   }}
                 >✕</button>
               </div>
@@ -465,9 +502,12 @@ export default function App() {
       {toast && (
         <div style={{
           position: 'absolute', bottom: `calc(${panelH + 14}px + env(safe-area-inset-bottom, 0px))`, left: '50%', transform: 'translateX(-50%)',
-          background: 'rgba(0,0,0,0.82)', color: '#fff', padding: '10px 20px',
+          background: 'rgba(8,10,24,0.88)', color: '#fff', padding: '10px 20px',
           borderRadius: 20, fontSize: 14, fontWeight: 600, pointerEvents: 'none',
-          backdropFilter: 'blur(8px)', whiteSpace: 'nowrap',
+          backdropFilter: 'blur(16px) saturate(160%)', WebkitBackdropFilter: 'blur(16px) saturate(160%)',
+          border: '1px solid rgba(255,255,255,0.14)',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
+          whiteSpace: 'nowrap',
         }}>
           {toast}
         </div>
@@ -481,13 +521,16 @@ function Modal({ children, onClose, bottom }) {
     <>
       <div
         onPointerDown={onClose}
-        style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)' }}
+        style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)' }}
       />
       <div style={{
         position: 'absolute', bottom: bottom || 'calc(154px + env(safe-area-inset-bottom, 0px))', left: '50%', transform: 'translateX(-50%)',
         width: 'calc(100% - 32px)', maxWidth: 360,
-        background: 'rgba(12,12,30,0.97)', borderRadius: 18, padding: 18,
-        border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(16px)',
+        background: 'linear-gradient(135deg, rgba(14,16,36,0.98) 0%, rgba(8,10,24,0.99) 100%)',
+        borderRadius: 18, padding: 18,
+        border: '1px solid rgba(255,255,255,0.12)',
+        backdropFilter: 'blur(24px) saturate(160%)', WebkitBackdropFilter: 'blur(24px) saturate(160%)',
+        boxShadow: '0 8px 40px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,255,255,0.08)',
       }}>
         {children}
       </div>
@@ -506,15 +549,18 @@ function ModalTitle({ children }) {
 function Btn({ bg, onTap, disabled, children }) {
   return (
     <button
+      className="bb-btn"
       onPointerDown={disabled ? undefined : onTap}
       style={{
         flex: 1, height: 40,
-        background: disabled ? '#1e1e2e' : bg,
+        background: disabled ? 'rgba(30,30,46,0.6)' : bg,
         color: disabled ? '#555' : '#fff',
-        border: 'none', borderRadius: 10,
+        border: disabled ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(255,255,255,0.15)',
+        borderRadius: 10,
         fontSize: 14, fontWeight: 700, fontFamily: FONT,
         cursor: disabled ? 'default' : 'pointer',
         opacity: disabled ? 0.6 : 1,
+        boxShadow: disabled ? 'none' : '0 2px 8px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.12)',
         WebkitTapHighlightColor: 'transparent',
         touchAction: 'manipulation', userSelect: 'none',
       }}
@@ -530,11 +576,14 @@ function CtrlBtn({ emoji, label, onTap, disabled, active, activeColor, activeGlo
     : active && activeColor
     ? activeColor
     : tintBg || 'rgba(255,255,255,0.07)'
-  const shadow = active && activeGlow
-    ? `0 0 20px ${activeGlow}, inset 0 1px 0 rgba(255,255,255,0.15), 0 2px 8px rgba(0,0,0,0.4)`
-    : 'none'
+  const shadow = disabled
+    ? 'none'
+    : active && activeGlow
+    ? `0 0 20px ${activeGlow}, inset 0 1px 0 rgba(255,255,255,0.18), 0 2px 8px rgba(0,0,0,0.4)`
+    : `0 2px 6px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.08)`
   return (
     <button
+      className="bb-btn"
       onPointerDown={disabled ? undefined : onTap}
       style={{
         flex: 1, height: 44, minWidth: 0, padding: 0,
