@@ -80,12 +80,13 @@ export default function App() {
   const saveNames = Object.keys(saves)
 
   return (
-    <div style={{ width: '100%', height: '100%', position: 'relative', fontFamily: FONT }}>
+    <div style={{ width: '100%', height: '100%', position: 'relative', fontFamily: FONT, touchAction: 'none' }}>
       <Canvas
         shadows
         camera={{ position: [8, 8, 12], fov: 50, near: 0.1, far: 200 }}
         gl={{ antialias: true, powerPreference: 'high-performance' }}
-        style={{ background: 'linear-gradient(to bottom, #1a1a2e 0%, #16213e 60%, #0f3460 100%)' }}
+        style={{ background: 'linear-gradient(to bottom, #1a1a2e 0%, #16213e 60%, #0f3460 100%)', touchAction: 'none' }}
+        onCreated={({ gl }) => { gl.domElement.style.touchAction = 'none' }}
       >
         <ambientLight intensity={0.6} />
         <directionalLight
@@ -99,7 +100,7 @@ export default function App() {
           <Scene blocks={blocks} knockKey={knockKey} onPlace={placeBlock} />
         </Physics>
         <OrbitControls
-          enablePan={false}
+          enablePan={true}
           minDistance={4}
           maxDistance={30}
           maxPolarAngle={Math.PI / 2 - 0.05}
@@ -133,13 +134,15 @@ export default function App() {
         </div>
       )}
 
-      {/* Colour palette */}
-      <div style={{ position: 'absolute', bottom: 148, left: 0, right: 0, display: 'flex', justifyContent: 'center', padding: '0 10px' }}>
+      {/* Colour palette — outer wrapper is pointer-transparent so orbit gestures
+          starting in the margin areas still reach the canvas */}
+      <div style={{ position: 'absolute', bottom: 148, left: 0, right: 0, display: 'flex', justifyContent: 'center', padding: '0 10px', pointerEvents: 'none' }}>
         <div style={{
           display: 'flex', gap: 7, padding: '8px 12px',
           background: 'rgba(0,0,0,0.55)', borderRadius: 28,
           backdropFilter: 'blur(10px)',
           flexWrap: 'wrap', justifyContent: 'center', maxWidth: 340,
+          pointerEvents: 'auto',
         }}>
           {PALETTE.map(c => (
             <button
@@ -158,17 +161,18 @@ export default function App() {
         </div>
       </div>
 
-      {/* Action buttons */}
+      {/* Action buttons — outer wrapper is pointer-transparent; each row opts back in */}
       <div style={{
         position: 'absolute', bottom: 0, left: 0, right: 0,
         padding: '0 16px 34px', display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center',
+        pointerEvents: 'none',
       }}>
-        <div style={{ display: 'flex', gap: 8, width: '100%', maxWidth: 340 }}>
+        <div style={{ display: 'flex', gap: 8, width: '100%', maxWidth: 340, pointerEvents: 'auto' }}>
           <Btn bg="#27ae60" onTap={() => { setModal('save'); setSaveName('') }} disabled={!blocks.length}>Save</Btn>
           <Btn bg="#8e44ad" onTap={() => setModal('load')} disabled={!saveNames.length}>Load</Btn>
           <Btn bg="#7f8c8d" onTap={clear} disabled={!blocks.length}>Clear</Btn>
         </div>
-        <div style={{ width: '100%', maxWidth: 340 }}>
+        <div style={{ width: '100%', maxWidth: 340, pointerEvents: 'auto' }}>
           <Btn bg="#e74c3c" onTap={knockDown} disabled={!blocks.length} tall>💥 Knock Down</Btn>
         </div>
       </div>

@@ -13,10 +13,13 @@ function useTap(onTap) {
   const pd = useRef(null)
   return {
     onPointerDown(e) {
+      // Only track the primary pointer — ignores secondary touch points
+      // from pinch/zoom so two-finger gestures never place blocks.
+      if (!e.isPrimary) return
       pd.current = { t: Date.now(), x: e.clientX, y: e.clientY }
     },
     onPointerUp(e) {
-      if (!pd.current) return
+      if (!e.isPrimary || !pd.current) return
       const dx = e.clientX - pd.current.x
       const dy = e.clientY - pd.current.y
       const isTap = Date.now() - pd.current.t < 300 && dx * dx + dy * dy < 64
