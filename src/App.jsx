@@ -265,7 +265,7 @@ export default function App() {
       <header style={{
         position: 'absolute', top: 0, left: 0, right: 0,
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        padding: '8px 18px', pointerEvents: 'none',
+        padding: 'calc(8px + env(safe-area-inset-top, 0px)) 18px 8px', pointerEvents: 'none',
       }}>
         <img
           src="/logo.png"
@@ -289,7 +289,7 @@ export default function App() {
       )}
 
       {/* Colour palette */}
-      <div style={{ position: 'absolute', bottom: paletteBottom, left: 0, right: 0, display: 'flex', justifyContent: 'center', padding: '0 10px', pointerEvents: 'none' }}>
+      <div style={{ position: 'absolute', bottom: `calc(${paletteBottom}px + env(safe-area-inset-bottom, 0px))`, left: 0, right: 0, display: 'flex', justifyContent: 'center', padding: '0 10px', pointerEvents: 'none' }}>
         <div style={{
           display: 'flex', gap: 7, padding: '8px 12px',
           background: 'rgba(0,0,0,0.55)', borderRadius: 28,
@@ -319,7 +319,7 @@ export default function App() {
       {/* Bottom controls */}
       <div style={{
         position: 'absolute', bottom: 0, left: 0, right: 0,
-        padding: '0 16px 34px', display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center',
+        padding: `0 16px calc(34px + env(safe-area-inset-bottom, 0px))`, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center',
         pointerEvents: 'none',
       }}>
         {/* Row 1: action buttons */}
@@ -414,7 +414,7 @@ export default function App() {
       {/* Toast */}
       {toast && (
         <div style={{
-          position: 'absolute', bottom: paletteBottom + 70, left: '50%', transform: 'translateX(-50%)',
+          position: 'absolute', bottom: `calc(${paletteBottom + 70}px + env(safe-area-inset-bottom, 0px))`, left: '50%', transform: 'translateX(-50%)',
           background: 'rgba(0,0,0,0.82)', color: '#fff', padding: '10px 20px',
           borderRadius: 20, fontSize: 14, fontWeight: 600, pointerEvents: 'none',
           backdropFilter: 'blur(8px)', whiteSpace: 'nowrap',
@@ -434,7 +434,7 @@ function Modal({ children, onClose }) {
         style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)' }}
       />
       <div style={{
-        position: 'absolute', bottom: 165, left: '50%', transform: 'translateX(-50%)',
+        position: 'absolute', bottom: 'calc(165px + env(safe-area-inset-bottom, 0px))', left: '50%', transform: 'translateX(-50%)',
         width: 'calc(100% - 32px)', maxWidth: 360,
         background: 'rgba(12,12,30,0.97)', borderRadius: 18, padding: 18,
         border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(16px)',
