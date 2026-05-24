@@ -56,7 +56,7 @@ function decodeDesign(str) {
       gridX: gx, gridZ: gz, stackLevel: sl,
       color: PALETTE[Math.min(ci, PALETTE.length - 1)],
       isFixed: fx === 1,
-      position: [gx, sl + 0.5, gz],
+      position: [gx + 0.5, sl + 0.5, gz + 0.5],
     })
   }
   return blocks
@@ -125,7 +125,8 @@ export default function App() {
         id: nextId.current++,
         gridX, gridZ, stackLevel,
         color: col,
-        position: [gridX, stackLevel + 0.5, gridZ],
+        // gridX/gridZ are integer cell indices; world center = index + 0.5
+        position: [gridX + 0.5, stackLevel + 0.5, gridZ + 0.5],
         isFixed: isAG,
       }]
     })
@@ -196,7 +197,7 @@ export default function App() {
     setBlocks(data.map((b, i) => ({
       ...b, id: i,
       isFixed: !!b.isFixed,
-      position: [b.gridX, b.stackLevel + 0.5, b.gridZ],
+      position: [b.gridX + 0.5, b.stackLevel + 0.5, b.gridZ + 0.5],
     })))
     setPhysicsKey(k => k + 1)
     setModal(null)

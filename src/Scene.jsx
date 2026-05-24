@@ -137,8 +137,9 @@ function Floor({ onPlace, antiGravity, placeHeight, color, ghostGrid, setGhostGr
 
   const handlers = useTap(() => {
     if (!tapPoint.current) return
-    const gx = Math.round(tapPoint.current.x)
-    const gz = Math.round(tapPoint.current.z)
+    // Math.floor gives the cell index; block world center = index + 0.5
+    const gx = Math.floor(tapPoint.current.x)
+    const gz = Math.floor(tapPoint.current.z)
     if (Math.abs(gx) < HALF && Math.abs(gz) < HALF) onPlace(gx, gz)
     tapPoint.current = null
   })
@@ -161,8 +162,8 @@ function Floor({ onPlace, antiGravity, placeHeight, color, ghostGrid, setGhostGr
           }}
           onPointerMove={e => {
             if (!antiGravity) { if (ghostGrid) setGhostGrid(null); return }
-            const gx = Math.round(e.point.x)
-            const gz = Math.round(e.point.z)
+            const gx = Math.floor(e.point.x)
+            const gz = Math.floor(e.point.z)
             if (Math.abs(gx) < HALF && Math.abs(gz) < HALF) setGhostGrid({ x: gx, z: gz })
           }}
         >
@@ -172,16 +173,21 @@ function Floor({ onPlace, antiGravity, placeHeight, color, ghostGrid, setGhostGr
         <gridHelper args={[GRID, GRID, '#4a5568', '#2d3748']} position={[0, 0.01, 0]} />
       </RigidBody>
 
-      {/* Ghost block preview */}
+      {/* Ghost block preview — ghostGrid stores cell indices; world center = index + 0.5 */}
       {antiGravity && ghostGrid && (
         <>
-          {/* Ghost block at placement height */}
-          <mesh position={[ghostGrid.x, placeHeight + 0.5, ghostGrid.z]} geometry={BOX_GEO}>
+          <mesh
+            position={[ghostGrid.x + 0.5, placeHeight + 0.5, ghostGrid.z + 0.5]}
+            geometry={BOX_GEO}
+            raycast={() => null}
+          >
             <meshStandardMaterial color={color} transparent opacity={0.4} depthWrite={false} />
           </mesh>
-          {/* Vertical guide line from floor to ghost */}
           {placeHeight > 0 && (
-            <mesh position={[ghostGrid.x, placeHeight / 2, ghostGrid.z]}>
+            <mesh
+              position={[ghostGrid.x + 0.5, placeHeight / 2, ghostGrid.z + 0.5]}
+              raycast={() => null}
+            >
               <boxGeometry args={[0.05, placeHeight, 0.05]} />
               <meshBasicMaterial color={color} transparent opacity={0.2} />
             </mesh>
