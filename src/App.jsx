@@ -149,16 +149,15 @@ export default function App() {
       <header style={{
         position: 'absolute', top: 0, left: 0, right: 0,
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        padding: '10px 18px', pointerEvents: 'none',
+        padding: '8px 18px', pointerEvents: 'none',
       }}>
         <img
           src="/logo.png"
           alt="Block Build"
           style={{
-            height: 'clamp(32px, 6vw, 48px)',
-            width: 'auto',
-            imageRendering: 'pixelated',
-            filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.6))',
+            width: 'clamp(80px, 16vw, 140px)',
+            height: 'auto',
+            filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.7))',
           }}
         />
         {blocks.length > 0 && (
