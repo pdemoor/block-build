@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useThree, useFrame } from '@react-three/fiber'
 import { RigidBody, CuboidCollider } from '@react-three/rapier'
 import * as THREE from 'three'
@@ -99,12 +99,36 @@ function SwipeHandler({ swipeRef, orbitRef, onFreeBlock }) {
   return null
 }
 
+function StarField() {
+  const geo = useMemo(() => {
+    const g = new THREE.BufferGeometry()
+    const pos = new Float32Array(300 * 3)
+    for (let i = 0; i < 300; i++) {
+      const u = Math.random()                      // cos of polar angle → 0=horizon,1=zenith
+      const phi = Math.random() * Math.PI * 2
+      const sinT = Math.sqrt(1 - u * u)
+      const r = 80 + Math.random() * 20
+      pos[i * 3]     = r * sinT * Math.cos(phi)
+      pos[i * 3 + 1] = r * u + 4                  // keep above floor
+      pos[i * 3 + 2] = r * sinT * Math.sin(phi)
+    }
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3))
+    return g
+  }, [])
+  return (
+    <points geometry={geo}>
+      <pointsMaterial size={0.15} color="#8ab0e8" transparent opacity={0.5} sizeAttenuation depthWrite={false} />
+    </points>
+  )
+}
+
 export default function Scene({ blocks, knockKey, onPlace, orbitRef, antiGravity, placeHeight, color, onFreeBlock }) {
   const swipeRef = useRef(null)
   const [ghostGrid, setGhostGrid] = useState(null) // {x, z} or null
 
   return (
     <>
+      <StarField />
       <SwipeHandler swipeRef={swipeRef} orbitRef={orbitRef} onFreeBlock={onFreeBlock} />
       <Floor
         onPlace={onPlace}
@@ -167,9 +191,9 @@ function Floor({ onPlace, antiGravity, placeHeight, color, ghostGrid, setGhostGr
           }}
         >
           <boxGeometry args={[GRID, 0.2, GRID]} />
-          <meshStandardMaterial color="#2c3e50" roughness={0.9} metalness={0.1} transparent opacity={0.55} depthWrite={false} />
+          <meshStandardMaterial color="#0b1624" roughness={0.92} metalness={0.18} emissive="#050a12" emissiveIntensity={0.3} transparent opacity={0.72} depthWrite={false} />
         </mesh>
-        <gridHelper args={[GRID, GRID, '#4a5568', '#2d3748']} position={[0, 0.01, 0]} />
+        <gridHelper args={[GRID, GRID, '#1c3254', '#0d1a2c']} position={[0, 0.01, 0]} />
       </RigidBody>
 
       {/* Ghost block preview — ghostGrid stores cell indices; world center = index + 0.5 */}
@@ -312,7 +336,7 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
         {block.color === 'rainbow' ? <RainbowMaterial /> : block.color === 'glitter' ? <GlitterMaterial /> : <meshStandardMaterial color={block.color} roughness={0.4} metalness={0.1} />}
       </mesh>
       <lineSegments geometry={EDGES_GEO}>
-        <lineBasicMaterial color="#000" transparent opacity={0.15} />
+        <lineBasicMaterial color="#000" transparent opacity={0.10} />
       </lineSegments>
     </RigidBody>
   )

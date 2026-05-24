@@ -257,12 +257,14 @@ export default function App() {
         shadows
         camera={{ position: [8, 8, 12], fov: 50, near: 0.1, far: 200 }}
         gl={{ antialias: true, powerPreference: 'high-performance' }}
-        style={{ background: 'linear-gradient(to bottom, #1a1a2e 0%, #16213e 60%, #0f3460 100%)', touchAction: 'none' }}
+        style={{ background: 'linear-gradient(to bottom, #080e1c 0%, #0c1530 55%, #080e1c 100%)', touchAction: 'none' }}
         onCreated={({ gl }) => { gl.domElement.style.touchAction = 'none' }}
       >
-        <ambientLight intensity={0.6} />
+        <fog attach="fog" args={['#080e1c', 72, 130]} />
+        <ambientLight intensity={0.38} />
+        <hemisphereLight args={['#1e3a6e', '#080c18', 0.55]} />
         <directionalLight
-          position={[8, 12, 8]} intensity={1.2} castShadow
+          position={[8, 14, 6]} intensity={0.95} castShadow
           shadow-mapSize={[1024, 1024]}
           shadow-camera-near={0.1} shadow-camera-far={60}
           shadow-camera-left={-14} shadow-camera-right={14}
@@ -290,6 +292,12 @@ export default function App() {
         />
         <Environment preset="city" />
       </Canvas>
+
+      {/* Vignette overlay */}
+      <div style={{
+        position: 'absolute', inset: 0, pointerEvents: 'none',
+        background: 'radial-gradient(ellipse at 50% 38%, transparent 48%, rgba(4,6,14,0.62) 100%)',
+      }} />
 
       {/* Header */}
       <header style={{
