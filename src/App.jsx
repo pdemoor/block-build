@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls, Environment } from '@react-three/drei'
 import { Physics } from '@react-three/rapier'
@@ -12,6 +12,7 @@ const PALETTE = [
   '#8B5A2B', 'glitter',
 ]
 const LS_KEY = 'blockbuild_saves'
+const LS_AUTOSAVE = 'blockbuild_autosave'
 const FONT = "system-ui, -apple-system, sans-serif"
 const MAX_HISTORY = 30
 
@@ -64,6 +65,14 @@ function decodeDesign(str) {
   return blocks
 }
 
+function loadAutosave() {
+  try {
+    const raw = localStorage.getItem(LS_AUTOSAVE)
+    if (!raw) return null
+    return JSON.parse(raw)
+  } catch { return null }
+}
+
 function loadFromUrl() {
   try {
     const d = new URLSearchParams(window.location.search).get('d')
@@ -78,6 +87,15 @@ export default function App() {
   const [blocks, setBlocks] = useState(() => {
     const fromUrl = loadFromUrl()
     if (fromUrl?.length) { nextId.current = fromUrl.length; return fromUrl }
+    const autosaved = loadAutosave()
+    if (autosaved?.length) {
+      nextId.current = autosaved.length
+      return autosaved.map((b, i) => ({
+        ...b, id: i,
+        isFixed: !!b.isFixed,
+        position: [b.gridX + 0.5, b.stackLevel + 0.5, b.gridZ + 0.5],
+      }))
+    }
     return []
   })
   const [color, setColor] = useState('#3498db')
@@ -102,6 +120,18 @@ export default function App() {
   placeHeightRef.current = placeHeight
   const historyRef = useRef([])
   const toastTimer = useRef(null)
+
+  useEffect(() => {
+    if (!blocks.length) {
+      localStorage.removeItem(LS_AUTOSAVE)
+      return
+    }
+    try {
+      const data = blocks.map(({ gridX, gridZ, stackLevel, color: c, isFixed }) =>
+        ({ gridX, gridZ, stackLevel, color: c, isFixed: !!isFixed }))
+      localStorage.setItem(LS_AUTOSAVE, JSON.stringify(data))
+    } catch {}
+  }, [blocks])
 
   function pushHistory(snap, type) {
     historyRef.current = [...historyRef.current.slice(-(MAX_HISTORY - 1)), { blocks: snap, type }]
