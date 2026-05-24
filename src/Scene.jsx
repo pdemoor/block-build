@@ -210,6 +210,54 @@ function BreathingLight() {
   return <pointLight ref={ref} position={[2, 20, 3]} color="#1c3a6a" intensity={0.12} />
 }
 
+// Very slow fog density pulse — world feels like it's breathing
+function AmbientBreath() {
+  const { scene } = useThree()
+  useFrame(({ clock }) => {
+    if (!scene.fog) return
+    const t = clock.getElapsedTime()
+    scene.fog.near = 56 + Math.sin(t * 0.055) * 2.5
+    scene.fog.far = 100 + Math.cos(t * 0.038) * 4
+  })
+  return null
+}
+
+// Extremely gentle camera orbit that fades in after ~4 s of inactivity,
+// then immediately surrenders the moment the user touches controls.
+function CinematicDrift({ orbitRef }) {
+  const lastActivity = useRef(performance.now())
+
+  useEffect(() => {
+    const ctrl = orbitRef.current
+    if (!ctrl) return
+    const stop = () => {
+      lastActivity.current = performance.now()
+      ctrl.autoRotate = false
+      ctrl.autoRotateSpeed = 0
+    }
+    const mark = () => { lastActivity.current = performance.now() }
+    ctrl.addEventListener('start', stop)
+    ctrl.addEventListener('change', mark)
+    return () => {
+      ctrl.removeEventListener('start', stop)
+      ctrl.removeEventListener('change', mark)
+    }
+  }, [orbitRef])
+
+  useFrame(() => {
+    const ctrl = orbitRef.current
+    if (!ctrl) return
+    const idleSec = (performance.now() - lastActivity.current) / 1000
+    const target = idleSec > 4 ? 0.16 : 0
+    // Lerp speed so it fades in/out smoothly; hard-stop on 'start' handles
+    // the case where the user grabs the camera mid-drift.
+    ctrl.autoRotateSpeed += (target - ctrl.autoRotateSpeed) * 0.01
+    ctrl.autoRotate = ctrl.autoRotateSpeed > 0.004
+  })
+
+  return null
+}
+
 export default function Scene({ blocks, knockKey, onPlace, orbitRef, antiGravity, placeHeight, color, isRandom, onFreeBlock, isPhotoMode }) {
   const swipeRef = useRef(null)
   const [ghostGrid, setGhostGrid] = useState(null) // {x, z} or null
@@ -218,6 +266,8 @@ export default function Scene({ blocks, knockKey, onPlace, orbitRef, antiGravity
     <>
       <StarField />
       <BreathingLight />
+      <AmbientBreath />
+      <CinematicDrift orbitRef={orbitRef} />
       <Shockwave knockKey={knockKey} />
       <KnockParticles knockKey={knockKey} />
       <SwipeHandler swipeRef={swipeRef} orbitRef={orbitRef} onFreeBlock={onFreeBlock} />
