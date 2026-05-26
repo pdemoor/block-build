@@ -578,6 +578,32 @@ function SilverMaterial({ isFixed }) {
   return <meshStandardMaterial ref={ref} color="#C0C0C0" roughness={0.08} metalness={0.90} emissive="#C0C0C0" emissiveIntensity={isFixed ? 0.06 : 0} />
 }
 
+// Lime jelly — translucent, clearcoated, pulsing inner glow
+function JellyMaterial({ isFixed }) {
+  const ref = useRef(null)
+  useFrame(({ clock }) => {
+    if (!ref.current) return
+    const t = clock.getElapsedTime()
+    const base = isFixed ? 0.13 : 0.07
+    ref.current.emissiveIntensity = base + Math.sin(t * 2.3) * 0.04 + Math.sin(t * 5.2) * 0.018
+  })
+  return (
+    <meshPhysicalMaterial
+      ref={ref}
+      color="#7CFF00"
+      roughness={0.05}
+      metalness={0}
+      clearcoat={0.92}
+      clearcoatRoughness={0.07}
+      transparent
+      opacity={0.82}
+      envMapIntensity={1.9}
+      emissive="#5aff00"
+      emissiveIntensity={0.07}
+    />
+  )
+}
+
 // Frosted ice — soft constant glow, stronger when floating
 function IceCyanMaterial({ isFixed }) {
   const ref = useRef(null)
@@ -680,15 +706,42 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
   const flashMatRef = useRef(null)
   const knockFlashRef = useRef(null)
   const lastTrailRef = useRef(-999)
+  const jellyKnockRef = useRef(null)
   const { clock } = useThree()
   const birthTime = useRef(clock.getElapsedTime())
 
   useFrame(() => {
     const t = clock.getElapsedTime()
 
-    // Scale: placement bounce (400ms spring), then float breathing for fixed blocks
+    // Scale: placement bounce / jelly wobble / float breathing
     if (meshRef.current) {
-      if (birthTime.current !== null) {
+      if (block.color === '#7CFF00') {
+        // Jelly block: anisotropic squash-and-stretch; knock takes priority over birth
+        if (jellyKnockRef.current !== null) {
+          const age = t - jellyKnockRef.current
+          if (age > 0.8) {
+            jellyKnockRef.current = null
+            meshRef.current.scale.setScalar(1)
+          } else {
+            const w = 0.26 * Math.exp(-4.5 * age) * Math.sin(11.5 * age + Math.PI * 0.5)
+            meshRef.current.scale.set(1 + w * 1.1, 1 - w, 1 + w * 0.9)
+          }
+        } else if (birthTime.current !== null) {
+          const age = t - birthTime.current
+          if (age > 0.9) { meshRef.current.scale.setScalar(1); birthTime.current = null }
+          else {
+            const w = 0.22 * Math.exp(-5.5 * age) * Math.sin(13.5 * age)
+            meshRef.current.scale.set(1 + w, 1 - w * 0.75, 1 + w * 0.88)
+          }
+        } else {
+          // Idle micro-jiggle — very subtle living feel
+          const phX = block.id * 0.7
+          const phZ = block.id * 1.3
+          const ix = 0.015 * Math.sin(t * 3.1 + phX)
+          const iz = 0.012 * Math.sin(t * 3.9 + phZ)
+          meshRef.current.scale.set(1 + ix, 1 - (ix + iz) * 0.45, 1 + iz)
+        }
+      } else if (birthTime.current !== null) {
         const age = t - birthTime.current
         if (age > 0.4) { meshRef.current.scale.setScalar(1); birthTime.current = null }
         else { meshRef.current.scale.setScalar(1 + 0.22 * Math.exp(-7 * age) * Math.cos(12 * age)) }
@@ -751,6 +804,7 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
     if (knockKey !== prevKnock.current && rb.current) {
       prevKnock.current = knockKey
       knockFlashRef.current = clock.getElapsedTime()
+      if (block.color === '#7CFF00') jellyKnockRef.current = clock.getElapsedTime()
       try { rb.current.setBodyType(0, true) } catch {}
       rb.current.applyImpulse(
         { x: (Math.random() - 0.5) * 26, y: Math.random() * 10 + 6, z: (Math.random() - 0.5) * 26 },
@@ -841,6 +895,8 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
           ? <SilverMaterial isFixed={block.isFixed} />
           : block.color === '#7DF9FF'
           ? <IceCyanMaterial isFixed={block.isFixed} />
+          : block.color === '#7CFF00'
+          ? <JellyMaterial isFixed={block.isFixed} />
           : block.isFixed
           ? <FixedBlockMaterial color={block.color} />
           : <meshStandardMaterial color={block.color} roughness={0.10} metalness={0.08} envMapIntensity={1.4} />}
