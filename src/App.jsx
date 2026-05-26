@@ -378,7 +378,7 @@ export default function App() {
         <img
           src="/logo.png"
           alt="Block Build"
-          style={{ width: 'clamp(56px, 11vw, 96px)', height: 'auto', filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.7))' }}
+          style={{ width: 'clamp(68px, 14vw, 112px)', height: 'auto', filter: 'drop-shadow(0 2px 12px rgba(0,0,0,0.8))' }}
         />
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
