@@ -302,16 +302,39 @@ export default function App() {
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative', fontFamily: FONT, touchAction: 'none' }}>
       <style>{`
-        .bb-btn { transition: transform 0.18s cubic-bezier(0.34,1.56,0.64,1); }
-        .bb-btn:active { transform: scale(0.88) !important; transition: transform 0s !important; }
-        .bb-swatch { transition: transform 0.16s cubic-bezier(0.34,1.56,0.64,1); }
-        .bb-swatch:active { transform: scale(0.80) !important; transition: transform 0s !important; }
+        /* Buttons: fast ease-in press, spring bounce-back, brightness dip for physical depth */
+        .bb-btn {
+          transition: transform 0.22s cubic-bezier(0.34,1.56,0.64,1), filter 0.20s ease;
+          will-change: transform;
+        }
+        .bb-btn:active {
+          transform: scale(0.87) !important;
+          filter: brightness(0.82) !important;
+          transition: transform 0.07s cubic-bezier(0.4,0,1,1), filter 0.07s ease !important;
+        }
+        /* Swatches: more elastic squeeze (smaller target, needs more feedback) */
+        .bb-swatch {
+          transition: transform 0.20s cubic-bezier(0.34,1.56,0.64,1), filter 0.16s ease;
+          will-change: transform;
+        }
+        .bb-swatch:active {
+          transform: scale(0.76) !important;
+          filter: brightness(0.78) !important;
+          transition: transform 0.06s cubic-bezier(0.4,0,1,1), filter 0.06s ease !important;
+        }
         @keyframes bbSwatchPulse {
-          0%, 100% { transform: scale(1.15); }
-          50%       { transform: scale(1.22); }
+          0%, 100% { transform: scale(1.15); filter: brightness(1.0); }
+          50%       { transform: scale(1.22); filter: brightness(1.16); }
         }
         .bb-swatch-selected { animation: bbSwatchPulse 1.9s ease-in-out infinite; }
-        .bb-swatch-selected:active { animation: none; transform: scale(0.80) !important; transition: transform 0s !important; }
+        .bb-swatch-selected:active { animation: none; transform: scale(0.76) !important; filter: brightness(0.78) !important; transition: transform 0.06s cubic-bezier(0.4,0,1,1), filter 0.06s ease !important; }
+        /* Pulsing glow on active-mode buttons (e.g. Float) */
+        @keyframes bbActiveGlow {
+          0%, 100% { filter: brightness(1.0); }
+          50%       { filter: brightness(1.16); }
+        }
+        .bb-active-glow { animation: bbActiveGlow 2.4s ease-in-out infinite; }
+        .bb-active-glow:active { animation: none !important; filter: brightness(0.82) !important; transition: filter 0.07s ease !important; }
         @keyframes bbFadeIn { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: scale(1); } }
         @keyframes bbLogoIn {
           from { opacity: 0; transform: translateY(-5px); }
@@ -450,6 +473,7 @@ export default function App() {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
+            className="bb-btn"
             onPointerDown={toggleMute}
             title={muted ? 'Unmute' : 'Mute'}
             style={{
@@ -821,7 +845,7 @@ function CtrlBtn({ emoji, label, onTap, disabled, active, activeColor, activeGlo
     : `0 2px 8px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.13), inset 0 -1px 0 rgba(0,0,0,0.10)`
   return (
     <button
-      className="bb-btn"
+      className={`bb-btn${active ? ' bb-active-glow' : ''}`}
       onPointerDown={disabled ? undefined : () => { playTap(); onTap() }}
       style={{
         flex: 1, height: 44, minWidth: 0, padding: 0,
