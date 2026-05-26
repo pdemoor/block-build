@@ -403,6 +403,8 @@ export default function App() {
         <pointLight position={[2, 11, 9]} intensity={0.22} color="#fff5ea" />
         {/* Subtle up-light at floor center — faint blue pool that makes the build area feel grounded */}
         <pointLight position={[0, 0.18, 0]} intensity={0.18} color="#0d2050" distance={13} decay={2} />
+        {/* Below-floor light — illuminates falling cubes seen through the translucent platform */}
+        <pointLight position={[0, -7, 0]} intensity={0.52} color="#14284e" distance={38} decay={1.4} />
         {/* Soft contact shadows — one extra render pass at 512px, zero per-frame allocations */}
         <ContactShadows
           position={[0, 0.016, 0]}

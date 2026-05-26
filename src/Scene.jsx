@@ -8,6 +8,20 @@ const HALF = GRID / 2
 const BOX_GEO = new THREE.BoxGeometry(1, 1, 1)
 const EDGES_GEO = new THREE.EdgesGeometry(BOX_GEO)
 
+// Perimeter outline of the floor platform — used for glowing rim
+const FLOOR_RIM_GEO = (() => {
+  const H = HALF
+  const g = new THREE.BufferGeometry()
+  const v = new Float32Array([
+    -H, 0, -H,  H, 0, -H,
+     H, 0, -H,  H, 0,  H,
+     H, 0,  H, -H, 0,  H,
+    -H, 0,  H, -H, 0, -H,
+  ])
+  g.setAttribute('position', new THREE.BufferAttribute(v, 3))
+  return g
+})()
+
 const PARTICLE_VERT = `
   attribute float aSize;
   attribute float aPhase;
@@ -596,11 +610,12 @@ function Floor({ onPlace, antiGravity, placeHeight, color, isRandom, ghostGrid, 
           }}
         >
           <boxGeometry args={[GRID, 0.2, GRID]} />
+          {/* Dark glass floor — translucent so falling cubes stay visible below */}
           <meshStandardMaterial
-            color="#080d18" roughness={0.36} metalness={0.72}
-            emissive="#04080f" emissiveIntensity={0.10}
+            color="#080d18" roughness={0.28} metalness={0.72}
+            emissive="#050c22" emissiveIntensity={0.16}
             envMapIntensity={2.4}
-            transparent opacity={0.90} depthWrite={false}
+            transparent opacity={0.38} depthWrite={false}
           />
         </mesh>
         {/* Fine 1-unit grid — very subtle */}
@@ -609,10 +624,19 @@ function Floor({ onPlace, antiGravity, placeHeight, color, isRandom, ghostGrid, 
         <gridHelper args={[GRID, 6, '#18304e', '#18304e']} position={[0, 0.013, 0]} />
       </RigidBody>
 
-      {/* Dark void plane — falling blocks drift into atmospheric darkness */}
-      <mesh position={[0, -2.5, 0]} rotation={[-Math.PI / 2, 0, 0]} raycast={() => null}>
-        <planeGeometry args={[GRID * 2, GRID * 2]} />
-        <meshBasicMaterial color="#020508" transparent opacity={0.52} depthWrite={false} />
+      {/* Glowing platform rim — defines edge, preserves "physical surface" feel */}
+      <lineSegments geometry={FLOOR_RIM_GEO} position={[0, 0.014, 0]}>
+        <lineBasicMaterial color="#2878d8" transparent opacity={0.72} depthWrite={false} />
+      </lineSegments>
+      {/* Softer outer glow ring just below rim */}
+      <lineSegments geometry={FLOOR_RIM_GEO} position={[0, -0.12, 0]}>
+        <lineBasicMaterial color="#1050a8" transparent opacity={0.38} depthWrite={false} />
+      </lineSegments>
+
+      {/* Far-distance void fade — only softens cubes at extreme depth, not the visible fall zone */}
+      <mesh position={[0, -28, 0]} rotation={[-Math.PI / 2, 0, 0]} raycast={() => null}>
+        <planeGeometry args={[GRID * 4, GRID * 4]} />
+        <meshBasicMaterial color="#010306" transparent opacity={0.06} depthWrite={false} />
       </mesh>
 
       {antiGravity && ghostGrid && !isRandom && (
