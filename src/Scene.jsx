@@ -579,13 +579,15 @@ function Floor({ onPlace, antiGravity, placeHeight, color, isRandom, ghostGrid, 
 
   const handlers = useTap(() => {
     if (!tapPoint.current || isPhotoMode) return
-    // Math.floor maps world x→cell index. Valid indices are [-HALF, HALF-1].
-    // Block world center = index + 0.5 (cell-center snapping).
-    // Use half-open range check [−HALF, HALF) to accept all 24 columns including the
-    // negative edge (gx = −12 covers x ∈ [−12,−11)), which Math.abs(gx) < HALF rejects.
-    const gx = Math.floor(tapPoint.current.x)
-    const gz = Math.floor(tapPoint.current.z)
-    if (gx >= -HALF && gx < HALF && gz >= -HALF && gz < HALF) onPlace(gx, gz)
+    const rawX = tapPoint.current.x
+    const rawZ = tapPoint.current.z
+    const rawY = tapPoint.current.y
+    // Cell index = Math.floor(world_coord). Block center = index + 0.5.
+    // Valid range: [-HALF, HALF-1] for both axes (24 cells each direction).
+    const gx = Math.floor(rawX)
+    const gz = Math.floor(rawZ)
+    const valid = gx >= -HALF && gx < HALF && gz >= -HALF && gz < HALF
+    if (valid) onPlace(gx, gz)
     tapPoint.current = null
   })
 
