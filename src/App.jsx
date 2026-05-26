@@ -313,6 +313,31 @@ export default function App() {
         .bb-swatch-selected { animation: bbSwatchPulse 1.9s ease-in-out infinite; }
         .bb-swatch-selected:active { animation: none; transform: scale(0.80) !important; transition: transform 0s !important; }
         @keyframes bbFadeIn { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: scale(1); } }
+        @keyframes bbLogoIn {
+          from { opacity: 0; transform: translateY(-5px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        .bb-logo-area { animation: bbLogoIn 0.65s cubic-bezier(0.25,0.46,0.45,0.94) 0.12s both; }
+        @keyframes bbTitleShimmer {
+          0%   { background-position: 160% center; }
+          100% { background-position: -160% center; }
+        }
+        .bb-title {
+          background: linear-gradient(90deg,
+            rgba(255,255,255,0.70) 0%,
+            rgba(220,205,255,0.82) 22%,
+            rgba(255,255,255,0.97) 42%,
+            rgba(190,220,255,0.88) 62%,
+            rgba(220,205,255,0.82) 80%,
+            rgba(255,255,255,0.70) 100%
+          );
+          background-size: 400% 100%;
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+          filter: drop-shadow(0 0 7px rgba(180,160,255,0.52)) drop-shadow(0 1px 2px rgba(0,0,0,0.55));
+          animation: bbTitleShimmer 5.5s linear infinite;
+        }
       `}</style>
 
       <Canvas
@@ -375,11 +400,28 @@ export default function App() {
         transform: isPhotoMode ? 'translateY(-8px)' : 'translateY(0)',
         transition: 'opacity 0.35s ease, transform 0.35s ease',
       }}>
-        <img
-          src="/block-build-logo.png?v=2"
-          alt="Block Build"
-          style={{ width: 'clamp(68px, 14vw, 112px)', height: 'auto', filter: 'drop-shadow(0 2px 12px rgba(0,0,0,0.8))' }}
-        />
+        <div className="bb-logo-area" style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+          gap: 'clamp(2px, 0.5vw, 5px)',
+        }}>
+          <img
+            src="/block-build-logo.png?v=2"
+            alt="Block Build"
+            style={{ width: 'clamp(68px, 14vw, 112px)', height: 'auto', filter: 'drop-shadow(0 2px 12px rgba(0,0,0,0.8))' }}
+          />
+          <span
+            className="bb-title"
+            style={{
+              fontFamily: "ui-rounded, 'SF Pro Rounded', -apple-system, BlinkMacSystemFont, system-ui, sans-serif",
+              fontSize: 'clamp(9px, 1.9vw, 15px)',
+              fontWeight: 900,
+              letterSpacing: '0.11em',
+              lineHeight: 1,
+              userSelect: 'none',
+              whiteSpace: 'nowrap',
+            }}
+          >BLOCK BUILD</span>
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
             onPointerDown={toggleMute}
