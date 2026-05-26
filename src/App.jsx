@@ -358,6 +358,7 @@ export default function App() {
           shadow-camera-top={16} shadow-camera-bottom={-16}
         />
         <pointLight position={[-6, 8, -10]} intensity={0.28} color="#1a3268" />
+        <pointLight position={[2, 11, 9]} intensity={0.22} color="#fff5ea" />
         <Physics key={physicsKey} gravity={[0, -20, 0]}>
           <Scene
             blocks={blocks}

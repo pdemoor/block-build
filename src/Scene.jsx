@@ -67,7 +67,7 @@ function FixedBlockMaterial({ color }) {
     const t = clock.getElapsedTime()
     ref.current.emissiveIntensity = 0.10 + Math.sin(t * 2.1) * 0.07 + Math.sin(t * 8.4) * 0.025
   })
-  return <meshStandardMaterial ref={ref} color={color} roughness={0.18} metalness={0.08} emissive={color} emissiveIntensity={0.10} />
+  return <meshStandardMaterial ref={ref} color={color} roughness={0.10} metalness={0.08} envMapIntensity={1.4} emissive={color} emissiveIntensity={0.10} />
 }
 
 // Expanding ring shockwave on knock
@@ -475,7 +475,7 @@ function GoldMaterial({ isFixed }) {
     const t = clock.getElapsedTime()
     ref.current.emissiveIntensity = 0.08 + Math.sin(t * 2.1) * 0.06 + Math.sin(t * 8.4) * 0.02
   })
-  return <meshStandardMaterial ref={ref} color="#D4AF37" roughness={0.14} metalness={0.90} emissive="#D4AF37" emissiveIntensity={isFixed ? 0.08 : 0} />
+  return <meshStandardMaterial ref={ref} color="#D4AF37" roughness={0.09} metalness={0.93} emissive="#D4AF37" emissiveIntensity={isFixed ? 0.08 : 0} />
 }
 
 // Lacquered gloss black — ultra-low roughness + cool blue float glow
@@ -486,7 +486,7 @@ function BlackMaterial({ isFixed }) {
     const t = clock.getElapsedTime()
     ref.current.emissiveIntensity = 0.05 + Math.sin(t * 2.1) * 0.04 + Math.sin(t * 8.4) * 0.015
   })
-  return <meshStandardMaterial ref={ref} color="#111111" roughness={0.06} metalness={0.92} emissive="#6090ff" emissiveIntensity={isFixed ? 0.05 : 0} />
+  return <meshStandardMaterial ref={ref} color="#111111" roughness={0.04} metalness={0.94} emissive="#6090ff" emissiveIntensity={isFixed ? 0.05 : 0} />
 }
 
 // Brushed metallic silver
@@ -497,7 +497,7 @@ function SilverMaterial({ isFixed }) {
     const t = clock.getElapsedTime()
     ref.current.emissiveIntensity = 0.06 + Math.sin(t * 2.1) * 0.04 + Math.sin(t * 8.4) * 0.015
   })
-  return <meshStandardMaterial ref={ref} color="#C0C0C0" roughness={0.12} metalness={0.86} emissive="#C0C0C0" emissiveIntensity={isFixed ? 0.06 : 0} />
+  return <meshStandardMaterial ref={ref} color="#C0C0C0" roughness={0.08} metalness={0.90} emissive="#C0C0C0" emissiveIntensity={isFixed ? 0.06 : 0} />
 }
 
 // Frosted ice — soft constant glow, stronger when floating
@@ -509,7 +509,7 @@ function IceCyanMaterial({ isFixed }) {
     const base = isFixed ? 0.10 : 0.05
     ref.current.emissiveIntensity = base + Math.sin(t * 1.7) * 0.03 + Math.sin(t * 5.3) * 0.015
   })
-  return <meshStandardMaterial ref={ref} color="#7DF9FF" roughness={0.25} metalness={0.04} emissive="#7DF9FF" emissiveIntensity={0.05} />
+  return <meshStandardMaterial ref={ref} color="#7DF9FF" roughness={0.13} metalness={0.06} envMapIntensity={1.3} emissive="#7DF9FF" emissiveIntensity={0.05} />
 }
 
 function GlitterMaterial() {
@@ -517,11 +517,15 @@ function GlitterMaterial() {
   useFrame(({ clock }) => {
     if (!ref.current) return
     const t = clock.getElapsedTime()
-    // Product of incommensurate frequencies → pseudo-random sparkle bursts
-    const s = Math.max(0, Math.sin(t * 6.7) * Math.cos(t * 11.3) * Math.sin(t * 17.1)) * 3
+    const s = Math.max(0, Math.sin(t * 6.7) * Math.cos(t * 11.3) * Math.sin(t * 17.1)) * 3.2
+    // Cycle emissive hue through silver-blue-gold-white for multi-facet glitter shimmer
+    const hue = (t * 0.18 + Math.sin(t * 4.3) * 0.25) % 1
+    ref.current.emissive.setHSL(hue, 0.55, 0.85)
     ref.current.emissiveIntensity = s
+    // Metalness flicker for "catching light" feel
+    ref.current.metalness = 0.92 + Math.sin(t * 13.7) * 0.06
   })
-  return <meshStandardMaterial ref={ref} color="#D0D8F0" metalness={0.95} roughness={0.04} emissive="#ffffff" emissiveIntensity={0} />
+  return <meshStandardMaterial ref={ref} color="#D8E0F4" metalness={0.92} roughness={0.03} emissive="#ffffff" emissiveIntensity={0} />
 }
 
 function RainbowMaterial() {
@@ -733,10 +737,15 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
           ? <IceCyanMaterial isFixed={block.isFixed} />
           : block.isFixed
           ? <FixedBlockMaterial color={block.color} />
-          : <meshStandardMaterial color={block.color} roughness={0.18} metalness={0.08} />}
+          : <meshStandardMaterial color={block.color} roughness={0.10} metalness={0.08} envMapIntensity={1.4} />}
       </mesh>
+      {/* Dark inner edge for depth definition */}
       <lineSegments geometry={EDGES_GEO}>
-        <lineBasicMaterial color="#000" transparent opacity={0.10} />
+        <lineBasicMaterial color="#000000" transparent opacity={0.07} />
+      </lineSegments>
+      {/* White rim edge — catches light at silhouettes like a real plastic toy */}
+      <lineSegments geometry={EDGES_GEO} scale={1.003}>
+        <lineBasicMaterial color="#ffffff" transparent opacity={0.13} depthWrite={false} />
       </lineSegments>
       {/* Placement white pop + knock orange burst overlay */}
       <mesh geometry={BOX_GEO} scale={1.02} raycast={() => null}>
