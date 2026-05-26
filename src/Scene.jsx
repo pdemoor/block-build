@@ -679,73 +679,87 @@ function SilverMaterial({ isFixed }) {
   return <meshStandardMaterial ref={ref} color="#C0C0C0" roughness={0.08} metalness={0.90} emissive="#C0C0C0" emissiveIntensity={isFixed ? 0.06 : 0} />
 }
 
-// Lime jelly — ultra-translucent, wet clearcoat, pulsing inner light scatter
+// Lime jelly — ultra-translucent, iridescent, dual-shell inner glow creates ripple illusion
 function JellyMaterial({ isFixed }) {
   const matRef = useRef(null)
-  const glowRef = useRef(null)
+  const shell1Ref = useRef(null)
+  const shell2Ref = useRef(null)
   useFrame(({ clock }) => {
     const t = clock.getElapsedTime()
-    const base = isFixed ? 0.22 : 0.12
-    const pulse = Math.sin(t * 2.3) * 0.08 + Math.sin(t * 5.2) * 0.032 + Math.sin(t * 9.1) * 0.014
+    const base = isFixed ? 0.26 : 0.15
+    const pulse = Math.sin(t * 2.3) * 0.11 + Math.sin(t * 5.2) * 0.045 + Math.sin(t * 9.1) * 0.020
     if (matRef.current) matRef.current.emissiveIntensity = base + pulse
-    if (glowRef.current) glowRef.current.opacity = 0.18 + Math.abs(Math.sin(t * 2.3 + 0.4)) * 0.12
+    // Two shells pulse at different speeds/phases — interference creates ripple feel
+    if (shell1Ref.current) shell1Ref.current.opacity = 0.22 + Math.abs(Math.sin(t * 2.3 + 0.4)) * 0.16
+    if (shell2Ref.current) shell2Ref.current.opacity = 0.10 + Math.abs(Math.sin(t * 3.9 + 1.9)) * 0.12
   })
   return (
     <>
       <meshPhysicalMaterial
         ref={matRef}
         color="#7CFF00"
-        roughness={0.02}
+        roughness={0.01}
         metalness={0}
         clearcoat={1.0}
-        clearcoatRoughness={0.03}
+        clearcoatRoughness={0.02}
         transparent
-        opacity={0.62}
-        envMapIntensity={2.4}
+        opacity={0.50}
+        envMapIntensity={2.8}
         emissive="#5aff00"
-        emissiveIntensity={0.12}
+        emissiveIntensity={0.15}
+        iridescence={0.72}
+        iridescenceIOR={1.3}
+        iridescenceThicknessRange={[80, 380]}
       />
-      {/* Back-face inner shell — fakes subsurface light scatter inside the translucent cube */}
-      <mesh geometry={BOX_GEO} scale={0.80} raycast={() => null}>
-        <meshBasicMaterial
-          ref={glowRef}
-          color="#aaff40"
-          transparent
-          opacity={0.18}
-          depthWrite={false}
-          side={THREE.BackSide}
-        />
+      {/* Outer glow shell — primary subsurface scatter illusion */}
+      <mesh geometry={BOX_GEO} scale={0.84} raycast={() => null}>
+        <meshBasicMaterial ref={shell1Ref} color="#aaff40" transparent opacity={0.22} depthWrite={false} side={THREE.BackSide} />
+      </mesh>
+      {/* Inner glow shell — different phase creates depth/ripple illusion */}
+      <mesh geometry={BOX_GEO} scale={0.55} raycast={() => null}>
+        <meshBasicMaterial ref={shell2Ref} color="#ccff60" transparent opacity={0.10} depthWrite={false} side={THREE.BackSide} />
       </mesh>
     </>
   )
 }
 
-// Spaghetti cube — wet pasta clearcoat, animated UV drift, floppy wobble
+// Spaghetti cube — glossy sauce sheen, animated noodle drift, inner sauce warmth
 function SpaghettiMaterial({ isFixed }) {
-  const ref = useRef(null)
+  const matRef = useRef(null)
+  const sauceRef = useRef(null)
   useFrame(({ clock }) => {
     const t = clock.getElapsedTime()
-    // Animate texture: noodles slowly drift upward and sway laterally
+    // Noodles drift faster + more lateral sway
     if (SPAGHETTI_TEX) {
-      SPAGHETTI_TEX.offset.y = (t * 0.018) % 1
-      SPAGHETTI_TEX.offset.x = Math.sin(t * 0.37) * 0.014
+      SPAGHETTI_TEX.offset.y = (t * 0.028) % 1
+      SPAGHETTI_TEX.offset.x = Math.sin(t * 0.48) * 0.022
     }
-    if (!ref.current) return
-    ref.current.emissiveIntensity = (isFixed ? 0.09 : 0.02)
-      + Math.sin(t * 1.9) * 0.04 + Math.sin(t * 7.1) * 0.015
+    if (!matRef.current) return
+    matRef.current.emissiveIntensity = (isFixed ? 0.11 : 0.03)
+      + Math.sin(t * 1.9) * 0.05 + Math.sin(t * 7.1) * 0.018
+    if (sauceRef.current) sauceRef.current.opacity = 0.16 + Math.abs(Math.sin(t * 1.7 + 0.8)) * 0.12
   })
   return (
-    <meshPhysicalMaterial
-      ref={ref}
-      map={SPAGHETTI_TEX}
-      roughness={0.34}
-      metalness={0}
-      clearcoat={0.50}
-      clearcoatRoughness={0.52}
-      envMapIntensity={0.90}
-      emissive="#D46020"
-      emissiveIntensity={0.02}
-    />
+    <>
+      <meshPhysicalMaterial
+        ref={matRef}
+        map={SPAGHETTI_TEX}
+        roughness={0.26}
+        metalness={0}
+        clearcoat={0.72}
+        clearcoatRoughness={0.42}
+        envMapIntensity={1.10}
+        emissive="#D46020"
+        emissiveIntensity={0.03}
+        iridescence={0.22}
+        iridescenceIOR={1.2}
+        iridescenceThicknessRange={[60, 220]}
+      />
+      {/* Inner sauce shell — warm tomato backlight, pulses like simmering sauce */}
+      <mesh geometry={BOX_GEO} scale={0.76} raycast={() => null}>
+        <meshBasicMaterial ref={sauceRef} color="#ff4808" transparent opacity={0.16} depthWrite={false} side={THREE.BackSide} />
+      </mesh>
+    </>
   )
 }
 
@@ -871,7 +885,7 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
           const ra = rb.current.angvel()
           curSpd = Math.sqrt(rv.x*rv.x + rv.y*rv.y + rv.z*rv.z)
                  + Math.sqrt(ra.x*ra.x + ra.y*ra.y + ra.z*ra.z) * 0.4
-          if (curSpd > 1.2) jellyWobbleRef.current = t
+          if (curSpd > 0.7) jellyWobbleRef.current = t
         }
 
         const kAge = jellyKnockRef.current !== null ? t - jellyKnockRef.current : 999
@@ -879,43 +893,46 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
         const bAge = birthTime.current !== null ? t - birthTime.current : 999
         let sx = 1, sy = 1, sz = 1
 
-        if (kAge < 1.5) {
-          // Knock: dramatic — 3 overlapping sine waves, high amplitude, slow decay
-          const w1 = 0.55 * Math.exp(-3.0 * kAge) * Math.sin(9.5 * kAge + Math.PI * 0.45)
-          const w2 = 0.30 * Math.exp(-2.5 * kAge) * Math.sin(16.0 * kAge + Math.PI * 0.85)
-          const w3 = 0.16 * Math.exp(-2.0 * kAge) * Math.sin(23.0 * kAge)
-          sx = 1 + w1 * 1.30 + w2 * 0.50 + w3 * 0.20
-          sy = 1 - w1 * 0.90 + w2 * 0.38 - w3 * 0.15
-          sz = 1 + w1 * 1.10 - w2 * 0.32 + w3 * 0.25
-        } else if (wAge < 1.2) {
-          // Tumble/fall wobble: continuous while airborne, then settles with a jiggle
+        if (kAge < 2.2) {
+          // Knock: 4 waves, very high amplitude, very slow decay — gooey long aftermath
+          const w1 = 0.78 * Math.exp(-1.8 * kAge) * Math.sin(8.5 * kAge + Math.PI * 0.45)
+          const w2 = 0.42 * Math.exp(-1.6 * kAge) * Math.sin(14.0 * kAge + Math.PI * 0.85)
+          const w3 = 0.22 * Math.exp(-1.4 * kAge) * Math.sin(20.5 * kAge)
+          const w4 = 0.14 * Math.exp(-1.1 * kAge) * Math.sin(5.5 * kAge + Math.PI * 1.2) // slow low-freq ripple
+          sx = 1 + w1 * 1.40 + w2 * 0.55 + w3 * 0.22 + w4 * 0.62
+          sy = 1 - w1 * 0.95 + w2 * 0.42 - w3 * 0.18 - w4 * 0.48
+          sz = 1 + w1 * 1.18 - w2 * 0.36 + w3 * 0.28 + w4 * 0.40
+        } else if (wAge < 1.5) {
+          // Tumble wobble: gooey sloshing, 3 waves, fires down to low speed
           const sf = Math.min(curSpd / 12, 1)
-          const amp = 0.38 + sf * 0.18
-          const w1 = amp * Math.exp(-4.2 * wAge) * Math.sin(11.5 * wAge + Math.PI * 0.3)
-          const w2 = amp * 0.42 * Math.exp(-3.0 * wAge) * Math.sin(18.5 * wAge)
-          sx = 1 + w1 + w2 * 0.32
-          sy = 1 - w1 * 0.78 + w2 * 0.18
-          sz = 1 + w1 * 0.88 - w2 * 0.22
-        } else if (bAge < 1.3) {
-          // Placement: squash on impact + secondary ripple wave
-          const w1 = 0.48 * Math.exp(-4.0 * bAge) * Math.sin(12.0 * bAge)
-          const w2 = 0.24 * Math.exp(-3.2 * bAge) * Math.sin(20.5 * bAge + 0.9)
-          sx = 1 + w1 + w2 * 0.28
-          sy = 1 - w1 * 0.85 - w2 * 0.20
-          sz = 1 + w1 * 0.90 + w2 * 0.38
+          const amp = 0.50 + sf * 0.24
+          const w1 = amp * Math.exp(-3.2 * wAge) * Math.sin(10.5 * wAge + Math.PI * 0.3)
+          const w2 = amp * 0.50 * Math.exp(-2.5 * wAge) * Math.sin(17.0 * wAge)
+          const w3 = amp * 0.28 * Math.exp(-2.0 * wAge) * Math.sin(4.5 * wAge + Math.PI * 0.8)
+          sx = 1 + w1 + w2 * 0.35 + w3 * 0.58
+          sy = 1 - w1 * 0.82 + w2 * 0.22 - w3 * 0.45
+          sz = 1 + w1 * 0.92 - w2 * 0.28 + w3 * 0.38
+        } else if (bAge < 1.9) {
+          // Placement: three-wave squash with slow gooey recovery
+          const w1 = 0.68 * Math.exp(-3.5 * bAge) * Math.sin(11.0 * bAge)
+          const w2 = 0.34 * Math.exp(-2.8 * bAge) * Math.sin(18.5 * bAge + 0.9)
+          const w3 = 0.18 * Math.exp(-2.2 * bAge) * Math.sin(7.0 * bAge + Math.PI * 0.5)
+          sx = 1 + w1 + w2 * 0.30 + w3 * 0.48
+          sy = 1 - w1 * 0.88 - w2 * 0.22 - w3 * 0.38
+          sz = 1 + w1 * 0.92 + w2 * 0.42 + w3 * 0.30
         } else {
           if (birthTime.current !== null) { birthTime.current = null }
-          // Idle: organic micro-jiggle with two overlapping frequencies per axis
+          // Idle: three-frequency jelly breathing — very alive, very gooey
           const phX = block.id * 0.7; const phZ = block.id * 1.3
-          const ix = 0.025 * Math.sin(t * 2.9 + phX) + 0.011 * Math.sin(t * 6.8 + phX * 0.5)
-          const iz = 0.020 * Math.sin(t * 3.7 + phZ) + 0.009 * Math.sin(t * 7.9 + phZ * 0.6)
-          sx = 1 + ix; sy = 1 - (ix + iz) * 0.62; sz = 1 + iz
+          const ix = 0.038 * Math.sin(t * 2.7 + phX) + 0.016 * Math.sin(t * 6.3 + phX * 0.5) + 0.008 * Math.sin(t * 11.2 + phX * 0.3)
+          const iz = 0.030 * Math.sin(t * 3.3 + phZ) + 0.013 * Math.sin(t * 7.5 + phZ * 0.6) + 0.006 * Math.sin(t * 12.8 + phZ * 0.4)
+          sx = 1 + ix; sy = 1 - (ix + iz) * 0.74; sz = 1 + iz
         }
 
         meshRef.current.scale.set(
-          Math.max(0.50, Math.min(1.65, sx)),
-          Math.max(0.50, Math.min(1.65, sy)),
-          Math.max(0.50, Math.min(1.65, sz))
+          Math.max(0.42, Math.min(1.82, sx)),
+          Math.max(0.42, Math.min(1.82, sy)),
+          Math.max(0.42, Math.min(1.82, sz))
         )
       } else if (block.color === 'spaghetti') {
         // Velocity-driven wobble: fires while block is actively tumbling/falling
@@ -925,7 +942,7 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
           const ra = rb.current.angvel()
           curSpd = Math.sqrt(rv.x*rv.x + rv.y*rv.y + rv.z*rv.z)
                  + Math.sqrt(ra.x*ra.x + ra.y*ra.y + ra.z*ra.z) * 0.4
-          if (curSpd > 1.0) spaghettiWobbleRef.current = t
+          if (curSpd > 0.6) spaghettiWobbleRef.current = t
         }
 
         const kAge = spaghettiKnockRef.current !== null ? t - spaghettiKnockRef.current : 999
@@ -933,43 +950,46 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
         const bAge = birthTime.current !== null ? t - birthTime.current : 999
         let sx = 1, sy = 1, sz = 1
 
-        if (kAge < 2.0) {
-          // Knock: 3 waves, very floppy, chaotic per-axis (each axis gets different response)
-          const w1 = 0.62 * Math.exp(-2.0 * kAge) * Math.sin(7.0 * kAge)
-          const w2 = 0.36 * Math.exp(-1.8 * kAge) * Math.sin(11.0 * kAge + Math.PI * 0.65)
-          const w3 = 0.20 * Math.exp(-1.5 * kAge) * Math.sin(15.5 * kAge + Math.PI * 1.3)
-          sx = 1 + w1 * 1.45 + w2 * 0.32 + w3 * 0.15
-          sy = 1 - w1 * 0.72 + w2 * 0.55 - w3 * 0.30
-          sz = 1 - w1 * 0.45 - w2 * 0.50 + w3 * 0.40
-        } else if (wAge < 1.4) {
-          // Tumble/fall wobble: noodles slosh while airborne
+        if (kAge < 2.8) {
+          // Knock: 4 waves, extremely floppy, chaotic per-axis — noodles everywhere
+          const w1 = 0.82 * Math.exp(-1.6 * kAge) * Math.sin(6.5 * kAge)
+          const w2 = 0.46 * Math.exp(-1.4 * kAge) * Math.sin(10.0 * kAge + Math.PI * 0.65)
+          const w3 = 0.26 * Math.exp(-1.2 * kAge) * Math.sin(14.0 * kAge + Math.PI * 1.3)
+          const w4 = 0.16 * Math.exp(-1.0 * kAge) * Math.sin(4.0 * kAge + Math.PI * 0.4)
+          sx = 1 + w1 * 1.55 + w2 * 0.35 + w3 * 0.15 + w4 * 0.68
+          sy = 1 - w1 * 0.78 + w2 * 0.60 - w3 * 0.34 - w4 * 0.52
+          sz = 1 - w1 * 0.48 - w2 * 0.54 + w3 * 0.46 + w4 * 0.38
+        } else if (wAge < 1.6) {
+          // Tumble: noodles slosh around, 3 waves + low-freq slap
           const sf = Math.min(curSpd / 10, 1)
-          const amp = 0.46 + sf * 0.22
-          const w1 = amp * Math.exp(-3.2 * wAge) * Math.sin(8.0 * wAge + Math.PI * 0.2)
-          const w2 = amp * 0.55 * Math.exp(-2.6 * wAge) * Math.sin(13.5 * wAge + Math.PI * 0.75)
-          sx = 1 + w1 + w2 * 0.28
-          sy = 1 - w1 * 0.60 + w2 * 0.35
-          sz = 1 - w1 * 0.22 - w2 * 0.48
-        } else if (bAge < 1.5) {
-          // Placement: heavy plop — big squash, slow noodle recovery
-          const w1 = 0.56 * Math.exp(-3.4 * bAge) * Math.sin(7.5 * bAge)
-          const w2 = 0.28 * Math.exp(-2.7 * bAge) * Math.sin(13.0 * bAge + 0.8)
-          sx = 1 + w1 + w2 * 0.22
-          sy = 1 - w1 * 0.82 - w2 * 0.36
-          sz = 1 + w1 * 0.78 + w2 * 0.44
+          const amp = 0.55 + sf * 0.26
+          const w1 = amp * Math.exp(-2.8 * wAge) * Math.sin(7.5 * wAge + Math.PI * 0.2)
+          const w2 = amp * 0.58 * Math.exp(-2.2 * wAge) * Math.sin(12.0 * wAge + Math.PI * 0.75)
+          const w3 = amp * 0.32 * Math.exp(-1.8 * wAge) * Math.sin(4.5 * wAge + Math.PI * 1.1)
+          sx = 1 + w1 + w2 * 0.32 + w3 * 0.58
+          sy = 1 - w1 * 0.62 + w2 * 0.40 - w3 * 0.48
+          sz = 1 - w1 * 0.24 - w2 * 0.52 + w3 * 0.42
+        } else if (bAge < 2.0) {
+          // Placement: heavy plop, 3 waves, painfully slow noodle recovery
+          const w1 = 0.74 * Math.exp(-3.0 * bAge) * Math.sin(7.0 * bAge)
+          const w2 = 0.36 * Math.exp(-2.4 * bAge) * Math.sin(12.0 * bAge + 0.8)
+          const w3 = 0.20 * Math.exp(-1.8 * bAge) * Math.sin(4.5 * bAge + 1.5)
+          sx = 1 + w1 + w2 * 0.25 + w3 * 0.55
+          sy = 1 - w1 * 0.84 - w2 * 0.40 - w3 * 0.44
+          sz = 1 + w1 * 0.82 + w2 * 0.48 + w3 * 0.38
         } else {
           if (birthTime.current !== null) { birthTime.current = null }
-          // Idle: pronounced noodle sway, two overlapping frequencies per axis
+          // Idle: very visible noodle sway — three frequencies, feels ridiculous
           const phX = block.id * 0.7; const phZ = block.id * 1.3
-          const ix = 0.034 * Math.sin(t * 2.1 + phX) + 0.015 * Math.sin(t * 5.3 + phX * 0.6)
-          const iz = 0.028 * Math.sin(t * 2.7 + phZ) + 0.012 * Math.sin(t * 6.2 + phZ * 0.7)
-          sx = 1 + ix; sy = 1 - (ix + iz) * 0.70; sz = 1 + iz
+          const ix = 0.046 * Math.sin(t * 1.9 + phX) + 0.020 * Math.sin(t * 4.8 + phX * 0.6) + 0.009 * Math.sin(t * 9.3 + phX * 0.3)
+          const iz = 0.038 * Math.sin(t * 2.5 + phZ) + 0.016 * Math.sin(t * 5.7 + phZ * 0.7) + 0.007 * Math.sin(t * 10.1 + phZ * 0.4)
+          sx = 1 + ix; sy = 1 - (ix + iz) * 0.80; sz = 1 + iz
         }
 
         meshRef.current.scale.set(
-          Math.max(0.44, Math.min(1.72, sx)),
-          Math.max(0.44, Math.min(1.72, sy)),
-          Math.max(0.44, Math.min(1.72, sz))
+          Math.max(0.38, Math.min(1.88, sx)),
+          Math.max(0.38, Math.min(1.88, sy)),
+          Math.max(0.38, Math.min(1.88, sz))
         )
       } else if (birthTime.current !== null) {
         const age = t - birthTime.current
@@ -1104,10 +1124,10 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
       position={block.position}
       type={block.isFixed ? 'fixed' : 'dynamic'}
       colliders={false}
-      restitution={isJelly ? 0.68 : isSpaghetti ? 0.22 : 0.3}
-      friction={isJelly ? 0.45 : isSpaghetti ? 0.30 : 0.8}
-      linearDamping={isJelly ? 0.04 : isSpaghetti ? 0.018 : 0.1}
-      angularDamping={isJelly ? 0.04 : isSpaghetti ? 0.018 : 0.1}
+      restitution={isJelly ? 0.80 : isSpaghetti ? 0.22 : 0.3}
+      friction={isJelly ? 0.40 : isSpaghetti ? 0.28 : 0.8}
+      linearDamping={isJelly ? 0.03 : isSpaghetti ? 0.014 : 0.1}
+      angularDamping={isJelly ? 0.03 : isSpaghetti ? 0.010 : 0.1}
     >
       <CuboidCollider args={[0.5, 0.5, 0.5]} />
       <mesh
