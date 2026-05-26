@@ -720,23 +720,31 @@ function JellyMaterial({ isFixed }) {
   )
 }
 
-// Spaghetti cube — noodle texture + floppy wobble (handled in Block.useFrame)
+// Spaghetti cube — wet pasta clearcoat, animated UV drift, floppy wobble
 function SpaghettiMaterial({ isFixed }) {
   const ref = useRef(null)
   useFrame(({ clock }) => {
-    if (!ref.current || !isFixed) return
     const t = clock.getElapsedTime()
-    ref.current.emissiveIntensity = 0.06 + Math.sin(t * 1.9) * 0.025 + Math.sin(t * 7.1) * 0.01
+    // Animate texture: noodles slowly drift upward and sway laterally
+    if (SPAGHETTI_TEX) {
+      SPAGHETTI_TEX.offset.y = (t * 0.018) % 1
+      SPAGHETTI_TEX.offset.x = Math.sin(t * 0.37) * 0.014
+    }
+    if (!ref.current) return
+    ref.current.emissiveIntensity = (isFixed ? 0.09 : 0.02)
+      + Math.sin(t * 1.9) * 0.04 + Math.sin(t * 7.1) * 0.015
   })
   return (
-    <meshStandardMaterial
+    <meshPhysicalMaterial
       ref={ref}
       map={SPAGHETTI_TEX}
-      roughness={0.55}
+      roughness={0.34}
       metalness={0}
-      envMapIntensity={0.6}
+      clearcoat={0.50}
+      clearcoatRoughness={0.52}
+      envMapIntensity={0.90}
       emissive="#D46020"
-      emissiveIntensity={isFixed ? 0.06 : 0}
+      emissiveIntensity={0.02}
     />
   )
 }
@@ -846,6 +854,7 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
   const jellyKnockRef = useRef(null)
   const jellyWobbleRef = useRef(null)
   const spaghettiKnockRef = useRef(null)
+  const spaghettiWobbleRef = useRef(null)
   const { clock } = useThree()
   const birthTime = useRef(clock.getElapsedTime())
 
@@ -909,32 +918,59 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
           Math.max(0.50, Math.min(1.65, sz))
         )
       } else if (block.color === 'spaghetti') {
-        // Spaghetti: floppy noodle wobble — more chaotic than jelly, slower decay
-        if (spaghettiKnockRef.current !== null) {
-          const age = t - spaghettiKnockRef.current
-          if (age > 1.1) {
-            spaghettiKnockRef.current = null
-            meshRef.current.scale.setScalar(1)
-          } else {
-            const w  = 0.32 * Math.exp(-3.2 * age) * Math.sin(8.5 * age + Math.PI * 0.4)
-            const w2 = 0.16 * Math.exp(-2.8 * age) * Math.sin(12.0 * age + Math.PI * 0.9)
-            meshRef.current.scale.set(1 + w * 1.2 + w2 * 0.3, 1 - w * 0.85 + w2 * 0.4, 1 + w * 0.9 - w2 * 0.2)
-          }
-        } else if (birthTime.current !== null) {
-          const age = t - birthTime.current
-          if (age > 1.1) { meshRef.current.scale.setScalar(1); birthTime.current = null }
-          else {
-            const w = 0.28 * Math.exp(-4.0 * age) * Math.sin(10.0 * age)
-            meshRef.current.scale.set(1 + w, 1 - w * 0.65, 1 + w * 0.82)
-          }
-        } else {
-          // Idle noodle sway — slightly more prominent than jelly
-          const phX = block.id * 0.7
-          const phZ = block.id * 1.3
-          const ix = 0.02 * Math.sin(t * 2.4 + phX) + 0.008 * Math.sin(t * 5.1 + phX * 0.7)
-          const iz = 0.016 * Math.sin(t * 3.1 + phZ) + 0.007 * Math.sin(t * 4.7 + phZ * 0.8)
-          meshRef.current.scale.set(1 + ix, 1 - (ix + iz) * 0.55, 1 + iz)
+        // Velocity-driven wobble: fires while block is actively tumbling/falling
+        let curSpd = 0
+        if (rb.current) {
+          const rv = rb.current.linvel()
+          const ra = rb.current.angvel()
+          curSpd = Math.sqrt(rv.x*rv.x + rv.y*rv.y + rv.z*rv.z)
+                 + Math.sqrt(ra.x*ra.x + ra.y*ra.y + ra.z*ra.z) * 0.4
+          if (curSpd > 1.0) spaghettiWobbleRef.current = t
         }
+
+        const kAge = spaghettiKnockRef.current !== null ? t - spaghettiKnockRef.current : 999
+        const wAge = spaghettiWobbleRef.current !== null ? t - spaghettiWobbleRef.current : 999
+        const bAge = birthTime.current !== null ? t - birthTime.current : 999
+        let sx = 1, sy = 1, sz = 1
+
+        if (kAge < 2.0) {
+          // Knock: 3 waves, very floppy, chaotic per-axis (each axis gets different response)
+          const w1 = 0.62 * Math.exp(-2.0 * kAge) * Math.sin(7.0 * kAge)
+          const w2 = 0.36 * Math.exp(-1.8 * kAge) * Math.sin(11.0 * kAge + Math.PI * 0.65)
+          const w3 = 0.20 * Math.exp(-1.5 * kAge) * Math.sin(15.5 * kAge + Math.PI * 1.3)
+          sx = 1 + w1 * 1.45 + w2 * 0.32 + w3 * 0.15
+          sy = 1 - w1 * 0.72 + w2 * 0.55 - w3 * 0.30
+          sz = 1 - w1 * 0.45 - w2 * 0.50 + w3 * 0.40
+        } else if (wAge < 1.4) {
+          // Tumble/fall wobble: noodles slosh while airborne
+          const sf = Math.min(curSpd / 10, 1)
+          const amp = 0.46 + sf * 0.22
+          const w1 = amp * Math.exp(-3.2 * wAge) * Math.sin(8.0 * wAge + Math.PI * 0.2)
+          const w2 = amp * 0.55 * Math.exp(-2.6 * wAge) * Math.sin(13.5 * wAge + Math.PI * 0.75)
+          sx = 1 + w1 + w2 * 0.28
+          sy = 1 - w1 * 0.60 + w2 * 0.35
+          sz = 1 - w1 * 0.22 - w2 * 0.48
+        } else if (bAge < 1.5) {
+          // Placement: heavy plop — big squash, slow noodle recovery
+          const w1 = 0.56 * Math.exp(-3.4 * bAge) * Math.sin(7.5 * bAge)
+          const w2 = 0.28 * Math.exp(-2.7 * bAge) * Math.sin(13.0 * bAge + 0.8)
+          sx = 1 + w1 + w2 * 0.22
+          sy = 1 - w1 * 0.82 - w2 * 0.36
+          sz = 1 + w1 * 0.78 + w2 * 0.44
+        } else {
+          if (birthTime.current !== null) { birthTime.current = null }
+          // Idle: pronounced noodle sway, two overlapping frequencies per axis
+          const phX = block.id * 0.7; const phZ = block.id * 1.3
+          const ix = 0.034 * Math.sin(t * 2.1 + phX) + 0.015 * Math.sin(t * 5.3 + phX * 0.6)
+          const iz = 0.028 * Math.sin(t * 2.7 + phZ) + 0.012 * Math.sin(t * 6.2 + phZ * 0.7)
+          sx = 1 + ix; sy = 1 - (ix + iz) * 0.70; sz = 1 + iz
+        }
+
+        meshRef.current.scale.set(
+          Math.max(0.44, Math.min(1.72, sx)),
+          Math.max(0.44, Math.min(1.72, sy)),
+          Math.max(0.44, Math.min(1.72, sz))
+        )
       } else if (birthTime.current !== null) {
         const age = t - birthTime.current
         if (age > 0.4) { meshRef.current.scale.setScalar(1); birthTime.current = null }
@@ -1060,6 +1096,7 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
   }
 
   const isJelly = block.color === '#7CFF00'
+  const isSpaghetti = block.color === 'spaghetti'
 
   return (
     <RigidBody
@@ -1067,10 +1104,10 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
       position={block.position}
       type={block.isFixed ? 'fixed' : 'dynamic'}
       colliders={false}
-      restitution={isJelly ? 0.68 : 0.3}
-      friction={isJelly ? 0.45 : 0.8}
-      linearDamping={isJelly ? 0.04 : 0.1}
-      angularDamping={isJelly ? 0.04 : 0.1}
+      restitution={isJelly ? 0.68 : isSpaghetti ? 0.22 : 0.3}
+      friction={isJelly ? 0.45 : isSpaghetti ? 0.30 : 0.8}
+      linearDamping={isJelly ? 0.04 : isSpaghetti ? 0.018 : 0.1}
+      angularDamping={isJelly ? 0.04 : isSpaghetti ? 0.018 : 0.1}
     >
       <CuboidCollider args={[0.5, 0.5, 0.5]} />
       <mesh
