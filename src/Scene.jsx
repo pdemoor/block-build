@@ -679,29 +679,44 @@ function SilverMaterial({ isFixed }) {
   return <meshStandardMaterial ref={ref} color="#C0C0C0" roughness={0.08} metalness={0.90} emissive="#C0C0C0" emissiveIntensity={isFixed ? 0.06 : 0} />
 }
 
-// Lime jelly — translucent, clearcoated, pulsing inner glow
+// Lime jelly — ultra-translucent, wet clearcoat, pulsing inner light scatter
 function JellyMaterial({ isFixed }) {
-  const ref = useRef(null)
+  const matRef = useRef(null)
+  const glowRef = useRef(null)
   useFrame(({ clock }) => {
-    if (!ref.current) return
     const t = clock.getElapsedTime()
-    const base = isFixed ? 0.13 : 0.07
-    ref.current.emissiveIntensity = base + Math.sin(t * 2.3) * 0.04 + Math.sin(t * 5.2) * 0.018
+    const base = isFixed ? 0.22 : 0.12
+    const pulse = Math.sin(t * 2.3) * 0.08 + Math.sin(t * 5.2) * 0.032 + Math.sin(t * 9.1) * 0.014
+    if (matRef.current) matRef.current.emissiveIntensity = base + pulse
+    if (glowRef.current) glowRef.current.opacity = 0.18 + Math.abs(Math.sin(t * 2.3 + 0.4)) * 0.12
   })
   return (
-    <meshPhysicalMaterial
-      ref={ref}
-      color="#7CFF00"
-      roughness={0.05}
-      metalness={0}
-      clearcoat={0.92}
-      clearcoatRoughness={0.07}
-      transparent
-      opacity={0.82}
-      envMapIntensity={1.9}
-      emissive="#5aff00"
-      emissiveIntensity={0.07}
-    />
+    <>
+      <meshPhysicalMaterial
+        ref={matRef}
+        color="#7CFF00"
+        roughness={0.02}
+        metalness={0}
+        clearcoat={1.0}
+        clearcoatRoughness={0.03}
+        transparent
+        opacity={0.62}
+        envMapIntensity={2.4}
+        emissive="#5aff00"
+        emissiveIntensity={0.12}
+      />
+      {/* Back-face inner shell — fakes subsurface light scatter inside the translucent cube */}
+      <mesh geometry={BOX_GEO} scale={0.80} raycast={() => null}>
+        <meshBasicMaterial
+          ref={glowRef}
+          color="#aaff40"
+          transparent
+          opacity={0.18}
+          depthWrite={false}
+          side={THREE.BackSide}
+        />
+      </mesh>
+    </>
   )
 }
 
@@ -829,6 +844,7 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
   const knockFlashRef = useRef(null)
   const lastTrailRef = useRef(-999)
   const jellyKnockRef = useRef(null)
+  const jellyWobbleRef = useRef(null)
   const spaghettiKnockRef = useRef(null)
   const { clock } = useThree()
   const birthTime = useRef(clock.getElapsedTime())
@@ -839,31 +855,59 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
     // Scale: placement bounce / jelly wobble / float breathing
     if (meshRef.current) {
       if (block.color === '#7CFF00') {
-        // Jelly block: anisotropic squash-and-stretch; knock takes priority over birth
-        if (jellyKnockRef.current !== null) {
-          const age = t - jellyKnockRef.current
-          if (age > 0.8) {
-            jellyKnockRef.current = null
-            meshRef.current.scale.setScalar(1)
-          } else {
-            const w = 0.26 * Math.exp(-4.5 * age) * Math.sin(11.5 * age + Math.PI * 0.5)
-            meshRef.current.scale.set(1 + w * 1.1, 1 - w, 1 + w * 0.9)
-          }
-        } else if (birthTime.current !== null) {
-          const age = t - birthTime.current
-          if (age > 0.9) { meshRef.current.scale.setScalar(1); birthTime.current = null }
-          else {
-            const w = 0.22 * Math.exp(-5.5 * age) * Math.sin(13.5 * age)
-            meshRef.current.scale.set(1 + w, 1 - w * 0.75, 1 + w * 0.88)
-          }
-        } else {
-          // Idle micro-jiggle — very subtle living feel
-          const phX = block.id * 0.7
-          const phZ = block.id * 1.3
-          const ix = 0.015 * Math.sin(t * 3.1 + phX)
-          const iz = 0.012 * Math.sin(t * 3.9 + phZ)
-          meshRef.current.scale.set(1 + ix, 1 - (ix + iz) * 0.45, 1 + iz)
+        // Velocity-driven wobble: fires while block is tumbling/falling, creating continuous squish
+        let curSpd = 0
+        if (rb.current) {
+          const rv = rb.current.linvel()
+          const ra = rb.current.angvel()
+          curSpd = Math.sqrt(rv.x*rv.x + rv.y*rv.y + rv.z*rv.z)
+                 + Math.sqrt(ra.x*ra.x + ra.y*ra.y + ra.z*ra.z) * 0.4
+          if (curSpd > 1.2) jellyWobbleRef.current = t
         }
+
+        const kAge = jellyKnockRef.current !== null ? t - jellyKnockRef.current : 999
+        const wAge = jellyWobbleRef.current !== null ? t - jellyWobbleRef.current : 999
+        const bAge = birthTime.current !== null ? t - birthTime.current : 999
+        let sx = 1, sy = 1, sz = 1
+
+        if (kAge < 1.5) {
+          // Knock: dramatic — 3 overlapping sine waves, high amplitude, slow decay
+          const w1 = 0.55 * Math.exp(-3.0 * kAge) * Math.sin(9.5 * kAge + Math.PI * 0.45)
+          const w2 = 0.30 * Math.exp(-2.5 * kAge) * Math.sin(16.0 * kAge + Math.PI * 0.85)
+          const w3 = 0.16 * Math.exp(-2.0 * kAge) * Math.sin(23.0 * kAge)
+          sx = 1 + w1 * 1.30 + w2 * 0.50 + w3 * 0.20
+          sy = 1 - w1 * 0.90 + w2 * 0.38 - w3 * 0.15
+          sz = 1 + w1 * 1.10 - w2 * 0.32 + w3 * 0.25
+        } else if (wAge < 1.2) {
+          // Tumble/fall wobble: continuous while airborne, then settles with a jiggle
+          const sf = Math.min(curSpd / 12, 1)
+          const amp = 0.38 + sf * 0.18
+          const w1 = amp * Math.exp(-4.2 * wAge) * Math.sin(11.5 * wAge + Math.PI * 0.3)
+          const w2 = amp * 0.42 * Math.exp(-3.0 * wAge) * Math.sin(18.5 * wAge)
+          sx = 1 + w1 + w2 * 0.32
+          sy = 1 - w1 * 0.78 + w2 * 0.18
+          sz = 1 + w1 * 0.88 - w2 * 0.22
+        } else if (bAge < 1.3) {
+          // Placement: squash on impact + secondary ripple wave
+          const w1 = 0.48 * Math.exp(-4.0 * bAge) * Math.sin(12.0 * bAge)
+          const w2 = 0.24 * Math.exp(-3.2 * bAge) * Math.sin(20.5 * bAge + 0.9)
+          sx = 1 + w1 + w2 * 0.28
+          sy = 1 - w1 * 0.85 - w2 * 0.20
+          sz = 1 + w1 * 0.90 + w2 * 0.38
+        } else {
+          if (birthTime.current !== null) { birthTime.current = null }
+          // Idle: organic micro-jiggle with two overlapping frequencies per axis
+          const phX = block.id * 0.7; const phZ = block.id * 1.3
+          const ix = 0.025 * Math.sin(t * 2.9 + phX) + 0.011 * Math.sin(t * 6.8 + phX * 0.5)
+          const iz = 0.020 * Math.sin(t * 3.7 + phZ) + 0.009 * Math.sin(t * 7.9 + phZ * 0.6)
+          sx = 1 + ix; sy = 1 - (ix + iz) * 0.62; sz = 1 + iz
+        }
+
+        meshRef.current.scale.set(
+          Math.max(0.50, Math.min(1.65, sx)),
+          Math.max(0.50, Math.min(1.65, sy)),
+          Math.max(0.50, Math.min(1.65, sz))
+        )
       } else if (block.color === 'spaghetti') {
         // Spaghetti: floppy noodle wobble — more chaotic than jelly, slower decay
         if (spaghettiKnockRef.current !== null) {
@@ -1015,16 +1059,18 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
     if (orbitRef?.current) orbitRef.current.enabled = true
   }
 
+  const isJelly = block.color === '#7CFF00'
+
   return (
     <RigidBody
       ref={rb}
       position={block.position}
       type={block.isFixed ? 'fixed' : 'dynamic'}
       colliders={false}
-      restitution={0.3}
-      friction={0.8}
-      linearDamping={0.1}
-      angularDamping={0.1}
+      restitution={isJelly ? 0.68 : 0.3}
+      friction={isJelly ? 0.45 : 0.8}
+      linearDamping={isJelly ? 0.04 : 0.1}
+      angularDamping={isJelly ? 0.04 : 0.1}
     >
       <CuboidCollider args={[0.5, 0.5, 0.5]} />
       <mesh
@@ -1057,18 +1103,17 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
           : block.isFixed
           ? <FixedBlockMaterial color={block.color} />
           : <meshStandardMaterial color={block.color} roughness={0.10} metalness={0.08} envMapIntensity={1.4} />}
-      </mesh>
-      {/* Dark inner edge for depth definition */}
-      <lineSegments geometry={EDGES_GEO}>
-        <lineBasicMaterial color="#000000" transparent opacity={0.07} />
-      </lineSegments>
-      {/* White rim edge — catches light at silhouettes like a real plastic toy */}
-      <lineSegments geometry={EDGES_GEO} scale={1.003}>
-        <lineBasicMaterial color="#ffffff" transparent opacity={0.13} depthWrite={false} />
-      </lineSegments>
-      {/* Placement white pop + knock orange burst overlay */}
-      <mesh geometry={BOX_GEO} scale={1.02} raycast={() => null}>
-        <meshBasicMaterial ref={flashMatRef} color="#ffffff" transparent opacity={0} depthWrite={false} />
+        {/* Edges live inside the mesh so they inherit wobble scale on jelly/spaghetti */}
+        <lineSegments geometry={EDGES_GEO}>
+          <lineBasicMaterial color="#000000" transparent opacity={0.07} />
+        </lineSegments>
+        <lineSegments geometry={EDGES_GEO} scale={1.003}>
+          <lineBasicMaterial color="#ffffff" transparent opacity={0.13} depthWrite={false} />
+        </lineSegments>
+        {/* Placement white pop + knock orange burst overlay */}
+        <mesh geometry={BOX_GEO} scale={1.02} raycast={() => null}>
+          <meshBasicMaterial ref={flashMatRef} color="#ffffff" transparent opacity={0} depthWrite={false} />
+        </mesh>
       </mesh>
     </RigidBody>
   )
