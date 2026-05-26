@@ -297,7 +297,7 @@ export default function App() {
 
   const saveNames = Object.keys(saves)
   // Panel height (px, excluding safe-area) for positioning toast and modals above panel
-  const panelH = antiGravity ? 188 : 142
+  const panelH = antiGravity ? 196 : 150
 
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative', fontFamily: FONT, touchAction: 'none' }}>
@@ -337,6 +337,18 @@ export default function App() {
           background-clip: text;
           filter: drop-shadow(0 0 7px rgba(180,160,255,0.52)) drop-shadow(0 1px 2px rgba(0,0,0,0.55));
           animation: bbTitleShimmer 5.5s linear infinite;
+        }
+        .bb-input {
+          background: rgba(255,255,255,0.07) !important;
+          border: 1px solid rgba(255,255,255,0.14) !important;
+          color: #fff !important;
+          outline: none;
+        }
+        .bb-input::placeholder { color: rgba(255,255,255,0.35); }
+        .bb-input:focus {
+          border-color: rgba(180,160,255,0.40) !important;
+          background: rgba(255,255,255,0.10) !important;
+          box-shadow: 0 0 0 3px rgba(120,100,255,0.18) !important;
         }
       `}</style>
 
@@ -441,11 +453,12 @@ export default function App() {
             onPointerDown={toggleMute}
             title={muted ? 'Unmute' : 'Mute'}
             style={{
-              width: 30, height: 30, borderRadius: '50%',
-              background: 'rgba(255,255,255,0.08)',
-              backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
-              border: '1px solid rgba(255,255,255,0.14)',
-              color: 'rgba(255,255,255,0.88)',
+              width: 32, height: 32, borderRadius: '50%',
+              background: 'linear-gradient(165deg, rgba(255,255,255,0.13) 0%, rgba(255,255,255,0.06) 100%)',
+              backdropFilter: 'blur(20px) saturate(180%)', WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+              border: '1px solid rgba(255,255,255,0.18)',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.40), inset 0 1px 0 rgba(255,255,255,0.16)',
+              color: 'rgba(255,255,255,0.92)',
               fontSize: 14, lineHeight: 1, padding: 0, flexShrink: 0,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               cursor: 'pointer', pointerEvents: 'all',
@@ -454,12 +467,13 @@ export default function App() {
           >{muted ? '🔇' : '🔊'}</button>
           {blocks.length > 0 && (
             <span style={{
-              background: 'rgba(255,255,255,0.08)',
-              backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
-              border: '1px solid rgba(255,255,255,0.14)',
-              color: 'rgba(255,255,255,0.88)',
+              background: 'linear-gradient(165deg, rgba(255,255,255,0.11) 0%, rgba(255,255,255,0.05) 100%)',
+              backdropFilter: 'blur(20px) saturate(180%)', WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+              border: '1px solid rgba(255,255,255,0.16)',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.13)',
+              color: 'rgba(255,255,255,0.92)',
               fontSize: 12, fontWeight: 700,
-              padding: '4px 11px', borderRadius: 20, letterSpacing: 0.3,
+              padding: '4px 12px', borderRadius: 20, letterSpacing: 0.3,
             }}>
               {blocks.length} block{blocks.length !== 1 ? 's' : ''}
             </span>
@@ -479,19 +493,31 @@ export default function App() {
       {/* Unified bottom panel */}
       <div style={{
         position: 'absolute', bottom: 0, left: 0, right: 0,
-        background: 'linear-gradient(to bottom, rgba(12,14,30,0.78) 0%, rgba(6,8,20,0.92) 100%)',
-        backdropFilter: 'blur(24px) saturate(180%)', WebkitBackdropFilter: 'blur(24px) saturate(180%)',
-        borderTop: '1px solid rgba(255,255,255,0.10)',
-        borderRadius: '20px 20px 0 0',
-        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), 0 -8px 32px rgba(0,0,0,0.35)',
-        padding: `12px 10px calc(14px + env(safe-area-inset-bottom, 0px))`,
+        background: 'linear-gradient(175deg, rgba(18,26,58,0.82) 0%, rgba(9,12,28,0.91) 50%, rgba(5,7,17,0.96) 100%)',
+        backdropFilter: 'blur(40px) saturate(200%) brightness(1.04)',
+        WebkitBackdropFilter: 'blur(40px) saturate(200%) brightness(1.04)',
+        borderTop: '1px solid rgba(255,255,255,0.16)',
+        borderRadius: '24px 24px 0 0',
+        boxShadow: [
+          'inset 0 1px 0 rgba(255,255,255,0.13)',
+          'inset 0 2px 16px rgba(100,140,255,0.05)',
+          '0 -16px 48px rgba(0,0,0,0.52)',
+          '0 -1px 24px rgba(80,120,255,0.09)',
+        ].join(', '),
+        padding: `14px 12px calc(16px + env(safe-area-inset-bottom, 0px))`,
         display: 'flex', flexDirection: 'column', gap: 10,
         opacity: isPhotoMode ? 0 : 1,
         transform: isPhotoMode ? 'translateY(100%)' : 'translateY(0)',
         transition: 'opacity 0.35s ease, transform 0.35s ease',
         pointerEvents: isPhotoMode ? 'none' : 'auto',
       }}>
-        {/* Colour palette */}
+        {/* Colour palette — nested glass layer for Vision Pro-style depth */}
+        <div style={{
+          background: 'linear-gradient(175deg, rgba(255,255,255,0.065) 0%, rgba(255,255,255,0.022) 100%)',
+          borderRadius: 16, padding: '8px 8px',
+          border: '1px solid rgba(255,255,255,0.09)',
+          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.09)',
+        }}>
         <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
           {PALETTE.map(c => (
             <button
@@ -539,6 +565,7 @@ export default function App() {
             }}
           >?</button>
         </div>
+        </div>
 
         {/* Float height row — only visible in float mode */}
         {antiGravity && (
@@ -548,16 +575,16 @@ export default function App() {
               onPointerDown={placeHeight === 0 ? undefined : () => setPlaceHeight(h => Math.max(0, h - 1))}
               style={{
                 width: 44, height: 36, flexShrink: 0,
-                background: placeHeight === 0 ? 'rgba(255,255,255,0.04)' : 'rgba(124,58,237,0.28)',
-                color: placeHeight === 0 ? 'rgba(255,255,255,0.2)' : '#d8b4fe',
-                border: `1px solid ${placeHeight === 0 ? 'rgba(255,255,255,0.06)' : 'rgba(124,58,237,0.45)'}`,
-                borderRadius: 8, fontSize: 20, fontWeight: 700, lineHeight: 1,
+                background: placeHeight === 0 ? 'rgba(255,255,255,0.03)' : 'linear-gradient(165deg, rgba(124,58,237,0.40) 0%, rgba(100,40,220,0.28) 100%)',
+                color: placeHeight === 0 ? 'rgba(255,255,255,0.20)' : '#d8b4fe',
+                border: `1px solid ${placeHeight === 0 ? 'rgba(255,255,255,0.05)' : 'rgba(124,58,237,0.52)'}`,
+                borderRadius: 10, fontSize: 20, fontWeight: 700, lineHeight: 1,
                 cursor: placeHeight === 0 ? 'default' : 'pointer',
-                boxShadow: placeHeight === 0 ? 'none' : '0 2px 8px rgba(124,58,237,0.25), inset 0 1px 0 rgba(255,255,255,0.1)',
+                boxShadow: placeHeight === 0 ? 'none' : '0 2px 10px rgba(124,58,237,0.30), inset 0 1px 0 rgba(255,255,255,0.18)',
                 WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation',
               }}
             >−</button>
-            <div style={{ flex: 1, textAlign: 'center', color: '#d8b4fe', fontSize: 12, fontWeight: 700, letterSpacing: 0.3 }}>
+            <div style={{ flex: 1, textAlign: 'center', color: '#c4b0f8', fontSize: 12, fontWeight: 700, letterSpacing: 0.3 }}>
               Float height: {placeHeight}
             </div>
             <button
@@ -565,12 +592,12 @@ export default function App() {
               onPointerDown={placeHeight === 20 ? undefined : () => setPlaceHeight(h => Math.min(20, h + 1))}
               style={{
                 width: 44, height: 36, flexShrink: 0,
-                background: placeHeight === 20 ? 'rgba(255,255,255,0.04)' : 'rgba(124,58,237,0.28)',
-                color: placeHeight === 20 ? 'rgba(255,255,255,0.2)' : '#d8b4fe',
-                border: `1px solid ${placeHeight === 20 ? 'rgba(255,255,255,0.06)' : 'rgba(124,58,237,0.45)'}`,
-                borderRadius: 8, fontSize: 20, fontWeight: 700, lineHeight: 1,
+                background: placeHeight === 20 ? 'rgba(255,255,255,0.03)' : 'linear-gradient(165deg, rgba(124,58,237,0.40) 0%, rgba(100,40,220,0.28) 100%)',
+                color: placeHeight === 20 ? 'rgba(255,255,255,0.20)' : '#d8b4fe',
+                border: `1px solid ${placeHeight === 20 ? 'rgba(255,255,255,0.05)' : 'rgba(124,58,237,0.52)'}`,
+                borderRadius: 10, fontSize: 20, fontWeight: 700, lineHeight: 1,
                 cursor: placeHeight === 20 ? 'default' : 'pointer',
-                boxShadow: placeHeight === 20 ? 'none' : '0 2px 8px rgba(124,58,237,0.25), inset 0 1px 0 rgba(255,255,255,0.1)',
+                boxShadow: placeHeight === 20 ? 'none' : '0 2px 10px rgba(124,58,237,0.30), inset 0 1px 0 rgba(255,255,255,0.18)',
                 WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation',
               }}
             >+</button>
@@ -581,7 +608,7 @@ export default function App() {
         <div style={{ display: 'flex', gap: 4 }}>
           <CtrlBtn emoji="↩" label="Undo"  onTap={undo}                                            disabled={!canUndo} />
           <CtrlBtn emoji="✕" label="Clear" onTap={clear}                                           disabled={!blocks.length} />
-          <CtrlBtn emoji="💥" label="Knock" onTap={knockDown}                                      disabled={!blocks.length} tintBg="rgba(239,68,68,0.22)" />
+          <CtrlBtn emoji="💥" label="Knock" onTap={knockDown}                                      disabled={!blocks.length} tintBg="linear-gradient(165deg, rgba(239,68,68,0.30) 0%, rgba(220,50,50,0.16) 100%)" />
           <CtrlBtn emoji="🔮" label="Float" onTap={toggleAntiGravity} active={antiGravity}         activeColor="#7c3aed" activeGlow="rgba(124,58,237,0.65)" />
           <CtrlBtn emoji="💾" label="Save"  onTap={() => { setModal('save'); setSaveName('') }}    disabled={!blocks.length} />
           <CtrlBtn emoji="📂" label="Load"  onTap={() => setModal('load')}                         disabled={!saveNames.length} />
@@ -599,10 +626,10 @@ export default function App() {
             onChange={e => setSaveName(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleSave()}
             placeholder="e.g. My Castle"
+            className="bb-input"
             style={{
               width: '100%', padding: '10px 14px', borderRadius: 10,
-              border: 'none', fontSize: 16, background: '#fff',
-              marginBottom: 12, boxSizing: 'border-box', fontFamily: FONT,
+              fontSize: 16, marginBottom: 12, boxSizing: 'border-box', fontFamily: FONT,
             }}
           />
           <div style={{ display: 'flex', gap: 8 }}>
@@ -624,11 +651,12 @@ export default function App() {
                   onPointerDown={() => handleLoad(name)}
                   style={{
                     flex: 1, padding: '10px 12px',
-                    background: 'rgba(41,128,185,0.35)', color: '#fff',
-                    border: '1px solid rgba(41,128,185,0.55)', borderRadius: 10,
+                    background: 'linear-gradient(165deg, rgba(41,128,185,0.38) 0%, rgba(41,128,185,0.20) 100%)',
+                    color: '#fff',
+                    border: '1px solid rgba(41,128,185,0.50)', borderRadius: 10,
                     fontSize: 14, fontWeight: 600, fontFamily: FONT,
                     cursor: 'pointer', textAlign: 'left',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1)',
+                    boxShadow: '0 2px 10px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.15)',
                     WebkitTapHighlightColor: 'transparent',
                   }}
                 >
@@ -642,10 +670,11 @@ export default function App() {
                   onPointerDown={() => handleDelete(name)}
                   style={{
                     padding: '10px 13px',
-                    background: 'rgba(192,57,43,0.35)', color: '#fff',
-                    border: '1px solid rgba(192,57,43,0.55)', borderRadius: 10,
+                    background: 'linear-gradient(165deg, rgba(192,57,43,0.38) 0%, rgba(192,57,43,0.20) 100%)',
+                    color: '#fff',
+                    border: '1px solid rgba(192,57,43,0.50)', borderRadius: 10,
                     cursor: 'pointer', fontFamily: FONT,
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1)',
+                    boxShadow: '0 2px 10px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.15)',
                     WebkitTapHighlightColor: 'transparent',
                   }}
                 >✕</button>
@@ -701,11 +730,12 @@ export default function App() {
       {toast && (
         <div style={{
           position: 'absolute', bottom: `calc(${panelH + 14}px + env(safe-area-inset-bottom, 0px))`, left: '50%', transform: 'translateX(-50%)',
-          background: 'rgba(8,10,24,0.88)', color: '#fff', padding: '10px 20px',
-          borderRadius: 20, fontSize: 14, fontWeight: 600, pointerEvents: 'none',
-          backdropFilter: 'blur(16px) saturate(160%)', WebkitBackdropFilter: 'blur(16px) saturate(160%)',
-          border: '1px solid rgba(255,255,255,0.14)',
-          boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
+          background: 'linear-gradient(165deg, rgba(20,28,58,0.95) 0%, rgba(8,12,26,0.98) 100%)',
+          color: 'rgba(255,255,255,0.94)', padding: '10px 22px',
+          borderRadius: 22, fontSize: 14, fontWeight: 600, pointerEvents: 'none',
+          backdropFilter: 'blur(28px) saturate(200%)', WebkitBackdropFilter: 'blur(28px) saturate(200%)',
+          border: '1px solid rgba(255,255,255,0.17)',
+          boxShadow: '0 4px 28px rgba(0,0,0,0.60), inset 0 1px 0 rgba(255,255,255,0.14)',
           whiteSpace: 'nowrap',
         }}>
           {toast}
@@ -720,16 +750,20 @@ function Modal({ children, onClose, bottom }) {
     <>
       <div
         onPointerDown={onClose}
-        style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)' }}
+        style={{
+          position: 'absolute', inset: 0,
+          background: 'rgba(0,0,0,0.55)',
+          backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
+        }}
       />
       <div style={{
-        position: 'absolute', bottom: bottom || 'calc(154px + env(safe-area-inset-bottom, 0px))', left: '50%', transform: 'translateX(-50%)',
+        position: 'absolute', bottom: bottom || 'calc(162px + env(safe-area-inset-bottom, 0px))', left: '50%', transform: 'translateX(-50%)',
         width: 'calc(100% - 32px)', maxWidth: 360,
-        background: 'linear-gradient(135deg, rgba(14,16,36,0.98) 0%, rgba(8,10,24,0.99) 100%)',
-        borderRadius: 18, padding: 18,
-        border: '1px solid rgba(255,255,255,0.12)',
-        backdropFilter: 'blur(24px) saturate(160%)', WebkitBackdropFilter: 'blur(24px) saturate(160%)',
-        boxShadow: '0 8px 40px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,255,255,0.08)',
+        background: 'linear-gradient(165deg, rgba(20,28,62,0.97) 0%, rgba(9,12,28,0.99) 100%)',
+        borderRadius: 20, padding: 18,
+        border: '1px solid rgba(255,255,255,0.15)',
+        backdropFilter: 'blur(40px) saturate(200%)', WebkitBackdropFilter: 'blur(40px) saturate(200%)',
+        boxShadow: '0 8px 48px rgba(0,0,0,0.72), inset 0 1px 0 rgba(255,255,255,0.14), 0 0 0 1px rgba(100,130,255,0.07)',
       }}>
         {children}
       </div>
@@ -754,12 +788,12 @@ function Btn({ bg, onTap, disabled, children }) {
         flex: 1, height: 40,
         background: disabled ? 'rgba(30,30,46,0.6)' : bg,
         color: disabled ? '#555' : '#fff',
-        border: disabled ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(255,255,255,0.15)',
+        border: disabled ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(255,255,255,0.20)',
         borderRadius: 10,
         fontSize: 14, fontWeight: 700, fontFamily: FONT,
         cursor: disabled ? 'default' : 'pointer',
         opacity: disabled ? 0.6 : 1,
-        boxShadow: disabled ? 'none' : '0 2px 8px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.12)',
+        boxShadow: disabled ? 'none' : '0 2px 10px rgba(0,0,0,0.40), inset 0 1px 0 rgba(255,255,255,0.20)',
         WebkitTapHighlightColor: 'transparent',
         touchAction: 'manipulation', userSelect: 'none',
       }}
@@ -771,15 +805,20 @@ function Btn({ bg, onTap, disabled, children }) {
 
 function CtrlBtn({ emoji, label, onTap, disabled, active, activeColor, activeGlow, tintBg }) {
   const bg = disabled
-    ? 'rgba(255,255,255,0.04)'
+    ? 'rgba(255,255,255,0.03)'
     : active && activeColor
-    ? activeColor
-    : tintBg || 'rgba(255,255,255,0.07)'
+    ? `linear-gradient(165deg, ${activeColor}cc 0%, ${activeColor} 100%)`
+    : tintBg || 'linear-gradient(165deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.04) 100%)'
+  const bdr = disabled
+    ? '1px solid rgba(255,255,255,0.05)'
+    : active && activeColor
+    ? `1px solid ${activeColor}bb`
+    : '1px solid rgba(255,255,255,0.13)'
   const shadow = disabled
     ? 'none'
     : active && activeGlow
-    ? `0 0 20px ${activeGlow}, inset 0 1px 0 rgba(255,255,255,0.18), 0 2px 8px rgba(0,0,0,0.4)`
-    : `0 2px 6px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.08)`
+    ? `0 0 28px ${activeGlow}, 0 0 10px ${activeGlow}88, inset 0 1px 0 rgba(255,255,255,0.30), 0 2px 8px rgba(0,0,0,0.42)`
+    : `0 2px 8px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.13), inset 0 -1px 0 rgba(0,0,0,0.10)`
   return (
     <button
       className="bb-btn"
@@ -789,8 +828,8 @@ function CtrlBtn({ emoji, label, onTap, disabled, active, activeColor, activeGlo
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2,
         background: bg,
         color: disabled ? 'rgba(255,255,255,0.22)' : '#fff',
-        border: active && activeColor ? 'none' : `1px solid ${disabled ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.11)'}`,
-        borderRadius: 10,
+        border: bdr,
+        borderRadius: 12,
         cursor: disabled ? 'default' : 'pointer',
         boxShadow: shadow,
         WebkitTapHighlightColor: 'transparent',
