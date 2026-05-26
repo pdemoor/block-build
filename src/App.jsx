@@ -376,7 +376,7 @@ export default function App() {
         transition: 'opacity 0.35s ease, transform 0.35s ease',
       }}>
         <img
-          src="/logo.png"
+          src="/block-build-logo.png?v=2"
           alt="Block Build"
           style={{ width: 'clamp(68px, 14vw, 112px)', height: 'auto', filter: 'drop-shadow(0 2px 12px rgba(0,0,0,0.8))' }}
         />
