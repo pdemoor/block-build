@@ -8,6 +8,35 @@ const HALF = GRID / 2
 const BOX_GEO = new THREE.BoxGeometry(1, 1, 1)
 const EDGES_GEO = new THREE.EdgesGeometry(BOX_GEO)
 
+const PARTICLE_VERT = `
+  attribute float aSize;
+  attribute float aPhase;
+  attribute vec3 aColor;
+  uniform float uTime;
+  varying float vAlpha;
+  varying vec3 vColor;
+  void main() {
+    vColor = aColor;
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    float sz = aSize * (130.0 / -mv.z);
+    gl_PointSize = max(2.0, min(sz, 48.0));
+    gl_Position = projectionMatrix * mv;
+    vAlpha = 0.5 + 0.5 * sin(uTime * 0.85 + aPhase);
+  }
+`
+
+const PARTICLE_FRAG = `
+  uniform float uOpacity;
+  varying float vAlpha;
+  varying vec3 vColor;
+  void main() {
+    float d = length(gl_PointCoord - 0.5);
+    if (d > 0.5) discard;
+    float a = (1.0 - smoothstep(0.1, 0.5, d)) * vAlpha * uOpacity;
+    gl_FragColor = vec4(vColor, a);
+  }
+`
+
 // Pulsing ghost preview shown in float mode
 function GhostBlock({ x, z, placeHeight, color }) {
   const matRef = useRef(null)
@@ -258,6 +287,84 @@ function CinematicDrift({ orbitRef }) {
   return null
 }
 
+function AmbientParticles() {
+  const COUNT = 90
+  const pointsRef = useRef(null)
+
+  const state = useMemo(() => {
+    const rng = (lo, hi) => lo + Math.random() * (hi - lo)
+    const COLORS = [
+      [0.62, 0.76, 0.97],
+      [0.80, 0.76, 1.00],
+      [0.86, 0.93, 1.00],
+      [1.00, 1.00, 1.00],
+      [0.72, 0.88, 1.00],
+    ]
+    const baseX = new Float32Array(COUNT)
+    const baseZ = new Float32Array(COUNT)
+    const baseY = new Float32Array(COUNT)
+    const speeds = new Float32Array(COUNT)
+    const phases = new Float32Array(COUNT)
+    const pos = new Float32Array(COUNT * 3)
+    const sizes = new Float32Array(COUNT)
+    const colAttr = new Float32Array(COUNT * 3)
+
+    for (let i = 0; i < COUNT; i++) {
+      baseX[i] = rng(-12, 12)
+      baseZ[i] = rng(-12, 12)
+      baseY[i] = rng(0, 18)
+      speeds[i] = rng(0.08, 0.28)
+      phases[i] = rng(0, Math.PI * 2)
+      pos[i*3] = baseX[i]; pos[i*3+1] = baseY[i]; pos[i*3+2] = baseZ[i]
+      sizes[i] = rng(0.6, 1.9)
+      const c = COLORS[Math.floor(Math.random() * COLORS.length)]
+      colAttr[i*3] = c[0]; colAttr[i*3+1] = c[1]; colAttr[i*3+2] = c[2]
+    }
+
+    const geometry = new THREE.BufferGeometry()
+    geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3))
+    geometry.setAttribute('aSize',    new THREE.BufferAttribute(sizes, 1))
+    geometry.setAttribute('aPhase',   new THREE.BufferAttribute(phases, 1))
+    geometry.setAttribute('aColor',   new THREE.BufferAttribute(colAttr, 3))
+
+    const material = new THREE.ShaderMaterial({
+      vertexShader: PARTICLE_VERT,
+      fragmentShader: PARTICLE_FRAG,
+      uniforms: { uTime: { value: 0 }, uOpacity: { value: 0.26 } },
+      transparent: true,
+      depthWrite: false,
+    })
+
+    return { baseX, baseZ, baseY, speeds, phases, geometry, material }
+  }, [])
+
+  useFrame(({ clock }, delta) => {
+    const pts = pointsRef.current
+    if (!pts) return
+    const { baseX, baseZ, baseY, speeds, phases, geometry } = state
+    const t = clock.getElapsedTime()
+    pts.material.uniforms.uTime.value = t
+    const attr = geometry.attributes.position
+    for (let i = 0; i < COUNT; i++) {
+      baseY[i] += speeds[i] * delta
+      if (baseY[i] > 18) {
+        baseY[i] = -0.5
+        baseX[i] = (Math.random() - 0.5) * 24
+        baseZ[i] = (Math.random() - 0.5) * 24
+      }
+      attr.setXYZ(
+        i,
+        baseX[i] + Math.sin(t * 0.38 + phases[i]) * 0.6,
+        baseY[i],
+        baseZ[i] + Math.cos(t * 0.31 + phases[i] * 1.4) * 0.5,
+      )
+    }
+    attr.needsUpdate = true
+  })
+
+  return <points ref={pointsRef} geometry={state.geometry} material={state.material} />
+}
+
 export default function Scene({ blocks, knockKey, onPlace, orbitRef, antiGravity, placeHeight, color, isRandom, onFreeBlock, isPhotoMode }) {
   const swipeRef = useRef(null)
   const [ghostGrid, setGhostGrid] = useState(null) // {x, z} or null
@@ -268,6 +375,7 @@ export default function Scene({ blocks, knockKey, onPlace, orbitRef, antiGravity
       <BreathingLight />
       <AmbientBreath />
       <CinematicDrift orbitRef={orbitRef} />
+      <AmbientParticles />
       <Shockwave knockKey={knockKey} />
       <KnockParticles knockKey={knockKey} />
       <SwipeHandler swipeRef={swipeRef} orbitRef={orbitRef} onFreeBlock={onFreeBlock} />
