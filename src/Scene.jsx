@@ -443,9 +443,10 @@ function Floor({ onPlace, antiGravity, placeHeight, color, isRandom, ghostGrid, 
         >
           <boxGeometry args={[GRID, 0.2, GRID]} />
           <meshStandardMaterial
-            color="#0a1520" roughness={0.88} metalness={0.22}
-            emissive="#050a14" emissiveIntensity={0.20}
-            transparent opacity={0.78} depthWrite={false}
+            color="#080d18" roughness={0.36} metalness={0.72}
+            emissive="#04080f" emissiveIntensity={0.10}
+            envMapIntensity={2.4}
+            transparent opacity={0.90} depthWrite={false}
           />
         </mesh>
         {/* Fine 1-unit grid — very subtle */}

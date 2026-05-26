@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { OrbitControls, Environment } from '@react-three/drei'
+import { OrbitControls, Environment, ContactShadows } from '@react-three/drei'
 import { Physics } from '@react-three/rapier'
 import Scene from './Scene'
 import { sound, playPlace, playKnock, playTap, playFloatOn, playFloatOff } from './sounds'
@@ -359,6 +359,19 @@ export default function App() {
         />
         <pointLight position={[-6, 8, -10]} intensity={0.28} color="#1a3268" />
         <pointLight position={[2, 11, 9]} intensity={0.22} color="#fff5ea" />
+        {/* Subtle up-light at floor center — faint blue pool that makes the build area feel grounded */}
+        <pointLight position={[0, 0.18, 0]} intensity={0.18} color="#0d2050" distance={13} decay={2} />
+        {/* Soft contact shadows — one extra render pass at 512px, zero per-frame allocations */}
+        <ContactShadows
+          position={[0, 0.016, 0]}
+          opacity={0.54}
+          width={24}
+          height={24}
+          blur={2.8}
+          far={26}
+          resolution={512}
+          color="#000a1e"
+        />
         <Physics key={physicsKey} gravity={[0, -20, 0]}>
           <Scene
             blocks={blocks}
