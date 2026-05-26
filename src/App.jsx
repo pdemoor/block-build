@@ -3,7 +3,7 @@ import { Canvas } from '@react-three/fiber'
 import { OrbitControls, Environment, ContactShadows } from '@react-three/drei'
 import { Physics } from '@react-three/rapier'
 import Scene from './Scene'
-import { sound, playPlace, playKnock, playTap, playFloatOn, playFloatOff } from './sounds'
+import { sound, playPlace, playKnock, playTap, playFloatOn, playFloatOff, playSave, playLoad } from './sounds'
 
 const PALETTE = [
   '#e74c3c', '#e67e22', '#FFE600', '#2ecc71',   // 0-3  red, orange, neon-yellow, green
@@ -125,7 +125,7 @@ export default function App() {
   const [placeHeight, setPlaceHeight] = useState(0)
   const [toast, setToast] = useState(null)
   const [isPhotoMode, setIsPhotoMode] = useState(false)
-  const [muted, setMuted] = useState(false)
+  const [muted, setMuted] = useState(() => { try { return localStorage.getItem('bb_muted') === '1' } catch { return false } })
 
   // Keep module-level sound state in sync on every render
   sound.muted = muted
@@ -259,6 +259,7 @@ export default function App() {
     const updated = { ...saves, [name]: data }
     setSaves(updated)
     localStorage.setItem(LS_KEY, JSON.stringify(updated))
+    playSave()
     setModal(null)
     setSaveName('')
   }, [saveName, blocks, saves])
@@ -274,6 +275,7 @@ export default function App() {
       position: [b.gridX + 0.5, b.stackLevel + 0.5, b.gridZ + 0.5],
     })))
     setPhysicsKey(k => k + 1)
+    playLoad()
     setModal(null)
   }, [saves])
 
@@ -293,7 +295,11 @@ export default function App() {
     })
   }, [])
 
-  const toggleMute = useCallback(() => setMuted(m => !m), [])
+  const toggleMute = useCallback(() => setMuted(m => {
+    const next = !m
+    try { localStorage.setItem('bb_muted', next ? '1' : '0') } catch {}
+    return next
+  }), [])
 
   const saveNames = Object.keys(saves)
   // Panel height (px, excluding safe-area) for positioning toast and modals above panel

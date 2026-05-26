@@ -108,3 +108,35 @@ export function playFloatOff() {
   osc.connect(g); g.connect(c.destination)
   osc.start(t); osc.stop(t + 0.20)
 }
+
+// Gentle two-note chime — design saved
+export function playSave() {
+  if (sound.muted) return
+  const c = ac(); if (!c) return
+  const t = c.currentTime
+  ;[523, 659].forEach((freq, i) => {
+    const d = i * 0.07
+    const osc = c.createOscillator(); osc.type = 'sine'; osc.frequency.value = freq
+    const g = c.createGain()
+    g.gain.setValueAtTime(0, t + d)
+    g.gain.linearRampToValueAtTime(0.055 - i * 0.008, t + d + 0.018)
+    g.gain.exponentialRampToValueAtTime(0.001, t + d + 0.30)
+    osc.connect(g); g.connect(c.destination)
+    osc.start(t + d); osc.stop(t + d + 0.32)
+  })
+}
+
+// Soft descending swoop — design loaded
+export function playLoad() {
+  if (sound.muted) return
+  const c = ac(); if (!c) return
+  const t = c.currentTime
+  const osc = c.createOscillator(); osc.type = 'sine'
+  osc.frequency.setValueAtTime(660, t)
+  osc.frequency.exponentialRampToValueAtTime(330, t + 0.18)
+  const g = c.createGain()
+  g.gain.setValueAtTime(0.062, t)
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.20)
+  osc.connect(g); g.connect(c.destination)
+  osc.start(t); osc.stop(t + 0.22)
+}
