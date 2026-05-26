@@ -64,6 +64,83 @@ const TRAIL_FRAG = `
   }
 `
 
+// Module-level spaghetti texture — drawn once, shared across all spaghetti cubes
+const SPAGHETTI_TEX = (() => {
+  const SIZE = 256
+  const canvas = document.createElement('canvas')
+  canvas.width = SIZE; canvas.height = SIZE
+  const ctx = canvas.getContext('2d')
+
+  // Tomato sauce base
+  ctx.fillStyle = '#9A2210'
+  ctx.fillRect(0, 0, SIZE, SIZE)
+
+  // Sauce depth blobs
+  for (let i = 0; i < 9; i++) {
+    const bx = Math.sin(i * 1.618) * 88 + SIZE / 2
+    const by = Math.cos(i * 2.414) * 88 + SIZE / 2
+    const g = ctx.createRadialGradient(bx, by, 4, bx, by, 52)
+    g.addColorStop(0, 'rgba(50,8,4,0.32)')
+    g.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = g; ctx.fillRect(0, 0, SIZE, SIZE)
+  }
+
+  const N = 9
+  const bandH = SIZE / N
+
+  for (let i = 0; i < N; i++) {
+    const yC = (i + 0.5) * bandH
+    const r = bandH * 0.41
+    const ph = i * 2.14 + 0.9
+
+    const mkPath = () => {
+      ctx.beginPath()
+      for (let x = 0; x <= SIZE; x += 2) {
+        const w = Math.sin(x * 0.038 + ph) * 3.2 + Math.sin(x * 0.082 + ph * 1.6) * 1.6
+        if (x === 0) ctx.moveTo(x, yC - r + w)
+        else ctx.lineTo(x, yC - r + w)
+      }
+      for (let x = SIZE; x >= 0; x -= 2) {
+        const w = Math.sin(x * 0.038 + ph) * 3.2 + Math.sin(x * 0.082 + ph * 1.6) * 1.6
+        ctx.lineTo(x, yC + r + w)
+      }
+      ctx.closePath()
+    }
+
+    // Noodle body — warm pasta hue varies per strand
+    const hue = 40 + (i % 3) * 5
+    const sat = 70 + (i % 2) * 9
+    const lit = 68 + (i % 4) * 4
+    mkPath(); ctx.fillStyle = `hsl(${hue},${sat}%,${lit}%)`; ctx.fill()
+
+    // Bottom shadow — cylindrical depth
+    mkPath()
+    const sg = ctx.createLinearGradient(0, yC - r, 0, yC + r)
+    sg.addColorStop(0, 'rgba(0,0,0,0)'); sg.addColorStop(0.6, 'rgba(0,0,0,0)'); sg.addColorStop(1, 'rgba(0,0,0,0.32)')
+    ctx.fillStyle = sg; ctx.fill()
+
+    // Top highlight — specular sheen
+    mkPath()
+    const hg = ctx.createLinearGradient(0, yC - r, 0, yC + r)
+    hg.addColorStop(0, `hsla(${hue},40%,96%,0.68)`)
+    hg.addColorStop(0.27, `hsla(${hue},50%,88%,0.18)`)
+    hg.addColorStop(0.5, 'rgba(255,255,255,0)')
+    ctx.fillStyle = hg; ctx.fill()
+  }
+
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.colorSpace = THREE.SRGBColorSpace
+  return tex
+})()
+
+// Safe display color for special string-keyed materials (ghost block, etc.)
+function displayColor(c) {
+  if (c === 'rainbow') return '#ff6688'
+  if (c === 'glitter') return '#d8e4f8'
+  if (c === 'spaghetti') return '#E8C060'
+  return c
+}
+
 // Module-level circular particle pool — no per-frame allocations
 const TN = 500
 const _tp  = new Float32Array(TN * 3)
@@ -94,12 +171,12 @@ function GhostBlock({ x, z, placeHeight, color }) {
   return (
     <>
       <mesh position={[x + 0.5, placeHeight + 0.5, z + 0.5]} geometry={BOX_GEO} raycast={() => null}>
-        <meshStandardMaterial ref={matRef} color={color} emissive={color} emissiveIntensity={0.22} transparent opacity={0.28} depthWrite={false} />
+        <meshStandardMaterial ref={matRef} color={displayColor(color)} emissive={displayColor(color)} emissiveIntensity={0.22} transparent opacity={0.28} depthWrite={false} />
       </mesh>
       {placeHeight > 0 && (
         <mesh position={[x + 0.5, placeHeight / 2, z + 0.5]} raycast={() => null}>
           <boxGeometry args={[0.05, placeHeight, 0.05]} />
-          <meshBasicMaterial color={color} transparent opacity={0.2} />
+          <meshBasicMaterial color={displayColor(color)} transparent opacity={0.2} />
         </mesh>
       )}
     </>
@@ -604,6 +681,27 @@ function JellyMaterial({ isFixed }) {
   )
 }
 
+// Spaghetti cube — noodle texture + floppy wobble (handled in Block.useFrame)
+function SpaghettiMaterial({ isFixed }) {
+  const ref = useRef(null)
+  useFrame(({ clock }) => {
+    if (!ref.current || !isFixed) return
+    const t = clock.getElapsedTime()
+    ref.current.emissiveIntensity = 0.06 + Math.sin(t * 1.9) * 0.025 + Math.sin(t * 7.1) * 0.01
+  })
+  return (
+    <meshStandardMaterial
+      ref={ref}
+      map={SPAGHETTI_TEX}
+      roughness={0.55}
+      metalness={0}
+      envMapIntensity={0.6}
+      emissive="#D46020"
+      emissiveIntensity={isFixed ? 0.06 : 0}
+    />
+  )
+}
+
 // Frosted ice — soft constant glow, stronger when floating
 function IceCyanMaterial({ isFixed }) {
   const ref = useRef(null)
@@ -707,6 +805,7 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
   const knockFlashRef = useRef(null)
   const lastTrailRef = useRef(-999)
   const jellyKnockRef = useRef(null)
+  const spaghettiKnockRef = useRef(null)
   const { clock } = useThree()
   const birthTime = useRef(clock.getElapsedTime())
 
@@ -741,6 +840,33 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
           const iz = 0.012 * Math.sin(t * 3.9 + phZ)
           meshRef.current.scale.set(1 + ix, 1 - (ix + iz) * 0.45, 1 + iz)
         }
+      } else if (block.color === 'spaghetti') {
+        // Spaghetti: floppy noodle wobble — more chaotic than jelly, slower decay
+        if (spaghettiKnockRef.current !== null) {
+          const age = t - spaghettiKnockRef.current
+          if (age > 1.1) {
+            spaghettiKnockRef.current = null
+            meshRef.current.scale.setScalar(1)
+          } else {
+            const w  = 0.32 * Math.exp(-3.2 * age) * Math.sin(8.5 * age + Math.PI * 0.4)
+            const w2 = 0.16 * Math.exp(-2.8 * age) * Math.sin(12.0 * age + Math.PI * 0.9)
+            meshRef.current.scale.set(1 + w * 1.2 + w2 * 0.3, 1 - w * 0.85 + w2 * 0.4, 1 + w * 0.9 - w2 * 0.2)
+          }
+        } else if (birthTime.current !== null) {
+          const age = t - birthTime.current
+          if (age > 1.1) { meshRef.current.scale.setScalar(1); birthTime.current = null }
+          else {
+            const w = 0.28 * Math.exp(-4.0 * age) * Math.sin(10.0 * age)
+            meshRef.current.scale.set(1 + w, 1 - w * 0.65, 1 + w * 0.82)
+          }
+        } else {
+          // Idle noodle sway — slightly more prominent than jelly
+          const phX = block.id * 0.7
+          const phZ = block.id * 1.3
+          const ix = 0.02 * Math.sin(t * 2.4 + phX) + 0.008 * Math.sin(t * 5.1 + phX * 0.7)
+          const iz = 0.016 * Math.sin(t * 3.1 + phZ) + 0.007 * Math.sin(t * 4.7 + phZ * 0.8)
+          meshRef.current.scale.set(1 + ix, 1 - (ix + iz) * 0.55, 1 + iz)
+        }
       } else if (birthTime.current !== null) {
         const age = t - birthTime.current
         if (age > 0.4) { meshRef.current.scale.setScalar(1); birthTime.current = null }
@@ -766,6 +892,10 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
           } else if (block.color === 'glitter') {
             _col.setHSL((t * 0.35 + Math.sin(t * 5) * 0.2) % 1, 0.6, 0.88)
             _emit(rp.x, rp.y, rp.z, _col.r, _col.g, _col.b, 0.9 + sf * 0.9, 0.26, 0.40 + sf * 0.22, t)
+          } else if (block.color === 'spaghetti') {
+            // Sauce flying: pasta-yellow at slow speeds, tomato-red at high speeds
+            _col.setRGB(0.74 + sf * 0.24, 0.44 - sf * 0.20, 0.02)
+            _emit(rp.x, rp.y, rp.z, _col.r, _col.g, _col.b, 0.85 + sf * 0.8, 0.26, 0.34 + sf * 0.20, t)
           } else {
             _col.set(block.color)
             _emit(rp.x, rp.y, rp.z,
@@ -805,6 +935,7 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
       prevKnock.current = knockKey
       knockFlashRef.current = clock.getElapsedTime()
       if (block.color === '#7CFF00') jellyKnockRef.current = clock.getElapsedTime()
+      if (block.color === 'spaghetti') spaghettiKnockRef.current = clock.getElapsedTime()
       try { rb.current.setBodyType(0, true) } catch {}
       rb.current.applyImpulse(
         { x: (Math.random() - 0.5) * 26, y: Math.random() * 10 + 6, z: (Math.random() - 0.5) * 26 },
@@ -897,6 +1028,8 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
           ? <IceCyanMaterial isFixed={block.isFixed} />
           : block.color === '#7CFF00'
           ? <JellyMaterial isFixed={block.isFixed} />
+          : block.color === 'spaghetti'
+          ? <SpaghettiMaterial isFixed={block.isFixed} />
           : block.isFixed
           ? <FixedBlockMaterial color={block.color} />
           : <meshStandardMaterial color={block.color} roughness={0.10} metalness={0.08} envMapIntensity={1.4} />}

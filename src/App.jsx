@@ -8,7 +8,7 @@ import { sound, playPlace, playKnock, playTap, playFloatOn, playFloatOff, playSa
 const PALETTE = [
   '#e74c3c', '#e67e22', '#FFE600', '#2ecc71',   // 0-3  red, orange, neon-yellow, green
   '#3498db', '#9b59b6', '#1abc9c', '#FF2DAA',   // 4-7  blue, purple, aqua, arcade-pink
-  '#ecf0f1', '#95a5a6', '#34495e', 'rainbow',   // 8-11 white, silver, slate, rainbow
+  '#ecf0f1', 'spaghetti', '#34495e', 'rainbow',  // 8-11 white, spaghetti, slate, rainbow
   '#D4AF37', '#C0C0C0', '#FF2A2A', '#FFB6D9',   // 12-15 gold, silver, bright-red, light-pink
   '#8B5A2B', 'glitter',                           // 16-17 brown, glitter
   '#7CFF00', '#7DF9FF', '#111111',               // 18-20 lime, ice-cyan, deep-black (NEW)
@@ -26,6 +26,7 @@ function swatchGlow(c) {
   if (c === '#7CFF00') return 'rgba(124,255,0,0.75)'
   if (c === '#7DF9FF') return 'rgba(125,249,255,0.72)'
   if (c === '#FF2DAA') return 'rgba(255,45,170,0.75)'
+  if (c === 'spaghetti') return 'rgba(232,192,80,0.72)'
   if (c === '#ecf0f1') return 'rgba(236,240,241,0.48)'
   if (c === '#D4AF37') return 'rgba(212,175,55,0.78)'
   return `${c}b0`   // default: 69% alpha (up from 53%)
@@ -560,6 +561,8 @@ export default function App() {
                   ? 'conic-gradient(from 0deg, #ff0000, #ff8000, #ffff00, #00cc00, #0066ff, #cc00ff, #ff0000)'
                   : c === 'glitter'
                   ? 'radial-gradient(circle at 30% 35%, #fff 0%, #e0e8ff 25%, #a0b0d0 55%, #c8d8f0 80%, #fff 100%)'
+                  : c === 'spaghetti'
+                  ? 'repeating-linear-gradient(0deg, #E8C060 0px, #E8C060 4px, #8E1E08 4px, #8E1E08 7px)'
                   : c === '#D4AF37'
                   ? 'radial-gradient(circle at 32% 28%, #f7e87a 0%, #D4AF37 50%, #9a7810 100%)'
                   : c === '#111111'
