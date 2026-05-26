@@ -37,6 +37,53 @@ const PARTICLE_FRAG = `
   }
 `
 
+const TRAIL_VERT = `
+  attribute float aAlpha;
+  attribute float aSize;
+  attribute vec3 aColor;
+  varying float vAlpha;
+  varying vec3 vColor;
+  void main() {
+    vAlpha = aAlpha;
+    vColor = aColor;
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    float sz = aSize * (120.0 / -mv.z);
+    gl_PointSize = max(1.5, min(sz, 36.0));
+    gl_Position = projectionMatrix * mv;
+  }
+`
+
+const TRAIL_FRAG = `
+  varying float vAlpha;
+  varying vec3 vColor;
+  void main() {
+    float d = length(gl_PointCoord - 0.5);
+    if (d > 0.5) discard;
+    float a = smoothstep(0.5, 0.0, d) * vAlpha;
+    gl_FragColor = vec4(vColor, a);
+  }
+`
+
+// Module-level circular particle pool — no per-frame allocations
+const TN = 500
+const _tp  = new Float32Array(TN * 3)
+const _ta  = new Float32Array(TN)
+const _tc  = new Float32Array(TN * 3)
+const _ts  = new Float32Array(TN)
+const _tb  = new Float32Array(TN)
+const _td  = new Float32Array(TN)
+const _tma = new Float32Array(TN)
+let   _th  = 0
+const _col = new THREE.Color()
+
+function _emit(x, y, z, r, g, b, sz, dur, maxA, now) {
+  const i = _th++ % TN
+  _tp[i*3]=x; _tp[i*3+1]=y; _tp[i*3+2]=z
+  _tc[i*3]=r; _tc[i*3+1]=g; _tc[i*3+2]=b
+  _ts[i]=sz; _tb[i]=now; _td[i]=dur; _tma[i]=maxA
+  _ta[i]=maxA  // pre-seed so particle is visible this frame
+}
+
 // Pulsing ghost preview shown in float mode
 function GhostBlock({ x, z, placeHeight, color }) {
   const matRef = useRef(null)
@@ -365,6 +412,35 @@ function AmbientParticles() {
   return <points ref={pointsRef} geometry={state.geometry} material={state.material} />
 }
 
+function TrailSystem() {
+  const { geo, mat } = useMemo(() => {
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.BufferAttribute(_tp, 3))
+    g.setAttribute('aAlpha',   new THREE.BufferAttribute(_ta, 1))
+    g.setAttribute('aColor',   new THREE.BufferAttribute(_tc, 3))
+    g.setAttribute('aSize',    new THREE.BufferAttribute(_ts, 1))
+    const m = new THREE.ShaderMaterial({
+      vertexShader: TRAIL_VERT,
+      fragmentShader: TRAIL_FRAG,
+      transparent: true,
+      depthWrite: false,
+    })
+    return { geo: g, mat: m }
+  }, [])
+
+  useFrame(({ clock }) => {
+    const t = clock.getElapsedTime()
+    for (let i = 0; i < TN; i++) {
+      const f = _td[i] > 0 ? (t - _tb[i]) / _td[i] : 1
+      _ta[i] = f >= 1 ? 0 : _tma[i] * (1 - f) * (1 - f)
+    }
+    geo.attributes.aAlpha.needsUpdate = true
+    geo.attributes.position.needsUpdate = true
+  })
+
+  return <points geometry={geo} material={mat} />
+}
+
 export default function Scene({ blocks, knockKey, onPlace, orbitRef, antiGravity, placeHeight, color, isRandom, onFreeBlock, isPhotoMode }) {
   const swipeRef = useRef(null)
   const [ghostGrid, setGhostGrid] = useState(null) // {x, z} or null
@@ -376,6 +452,7 @@ export default function Scene({ blocks, knockKey, onPlace, orbitRef, antiGravity
       <AmbientBreath />
       <CinematicDrift orbitRef={orbitRef} />
       <AmbientParticles />
+      <TrailSystem />
       <Shockwave knockKey={knockKey} />
       <KnockParticles knockKey={knockKey} />
       <SwipeHandler swipeRef={swipeRef} orbitRef={orbitRef} onFreeBlock={onFreeBlock} />
@@ -602,6 +679,7 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
   const meshRef = useRef(null)
   const flashMatRef = useRef(null)
   const knockFlashRef = useRef(null)
+  const lastTrailRef = useRef(-999)
   const { clock } = useThree()
   const birthTime = useRef(clock.getElapsedTime())
 
@@ -617,6 +695,33 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
       } else if (block.isFixed) {
         // Very subtle breathing ±1.2%, phase-offset per block id so they're not in sync
         meshRef.current.scale.setScalar(1 + Math.sin(t * 1.8 + block.id * 0.7) * 0.012)
+      }
+    }
+
+    // Motion trail: emit afterimage particles when block is flying fast
+    if (rb.current) {
+      const rv = rb.current.linvel()
+      const spd = Math.sqrt(rv.x*rv.x + rv.y*rv.y + rv.z*rv.z)
+      if (spd > 2.2 && t - lastTrailRef.current > 0.048) {
+        lastTrailRef.current = t
+        const rp = rb.current.translation()
+        if (rp.y > -4) {
+          const sf = Math.min(spd / 10, 1)
+          if (block.color === 'rainbow') {
+            _col.setHSL((t * 0.55) % 1, 1.0, 0.72)
+            _emit(rp.x, rp.y, rp.z, _col.r, _col.g, _col.b, 0.9 + sf * 0.9, 0.26, 0.40 + sf * 0.22, t)
+          } else if (block.color === 'glitter') {
+            _col.setHSL((t * 0.35 + Math.sin(t * 5) * 0.2) % 1, 0.6, 0.88)
+            _emit(rp.x, rp.y, rp.z, _col.r, _col.g, _col.b, 0.9 + sf * 0.9, 0.26, 0.40 + sf * 0.22, t)
+          } else {
+            _col.set(block.color)
+            _emit(rp.x, rp.y, rp.z,
+              Math.min(1, _col.r * 1.5 + 0.08),
+              Math.min(1, _col.g * 1.5 + 0.08),
+              Math.min(1, _col.b * 1.5 + 0.08),
+              0.7 + sf * 0.8, 0.26, 0.30 + sf * 0.18, t)
+          }
+        }
       }
     }
 
