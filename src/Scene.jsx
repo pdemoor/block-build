@@ -579,10 +579,13 @@ function Floor({ onPlace, antiGravity, placeHeight, color, isRandom, ghostGrid, 
 
   const handlers = useTap(() => {
     if (!tapPoint.current || isPhotoMode) return
-    // Math.floor gives the cell index; block world center = index + 0.5
+    // Math.floor maps world x→cell index. Valid indices are [-HALF, HALF-1].
+    // Block world center = index + 0.5 (cell-center snapping).
+    // Use half-open range check [−HALF, HALF) to accept all 24 columns including the
+    // negative edge (gx = −12 covers x ∈ [−12,−11)), which Math.abs(gx) < HALF rejects.
     const gx = Math.floor(tapPoint.current.x)
     const gz = Math.floor(tapPoint.current.z)
-    if (Math.abs(gx) < HALF && Math.abs(gz) < HALF) onPlace(gx, gz)
+    if (gx >= -HALF && gx < HALF && gz >= -HALF && gz < HALF) onPlace(gx, gz)
     tapPoint.current = null
   })
 
@@ -606,7 +609,8 @@ function Floor({ onPlace, antiGravity, placeHeight, color, isRandom, ghostGrid, 
             if (!antiGravity) { if (ghostGrid) setGhostGrid(null); return }
             const gx = Math.floor(e.point.x)
             const gz = Math.floor(e.point.z)
-            if (Math.abs(gx) < HALF && Math.abs(gz) < HALF) setGhostGrid({ x: gx, z: gz })
+            // Same half-open range check as placement: accept all 24 columns/rows
+            if (gx >= -HALF && gx < HALF && gz >= -HALF && gz < HALF) setGhostGrid({ x: gx, z: gz })
           }}
         >
           <boxGeometry args={[GRID, 0.2, GRID]} />

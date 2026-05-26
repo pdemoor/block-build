@@ -145,6 +145,9 @@ export default function App() {
   const historyRef = useRef([])
   const toastTimer = useRef(null)
   const glRef = useRef(null)
+  // Prevents duplicate placement when multiple event paths fire for one gesture (e.g.
+  // both a Block's onPointerUp and the Floor's tap handler resolving the same touch).
+  const lastPlaceTimeRef = useRef(0)
 
   useEffect(() => {
     if (!blocks.length) {
@@ -170,6 +173,12 @@ export default function App() {
   }
 
   const placeBlock = useCallback((gridX, gridZ) => {
+    // Guard: if two event paths (Block tap + Floor tap) fire within 80 ms for the
+    // same gesture, only the first call goes through. 80 ms is well below normal
+    // inter-tap speed (~150 ms+) so rapid stacking is unaffected.
+    const now = Date.now()
+    if (now - lastPlaceTimeRef.current < 80) return
+    lastPlaceTimeRef.current = now
     playPlace()
     pushHistory(blocksRef.current, 'place')
     const isAG = antiGravityRef.current
