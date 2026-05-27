@@ -3,8 +3,17 @@ import { useThree, useFrame } from '@react-three/fiber'
 import { RigidBody, CuboidCollider } from '@react-three/rapier'
 import * as THREE from 'three'
 
-const GRID = 24
-const HALF = GRID / 2
+// Grid coordinate system:
+//   GRID = 24 cells, each cell is CELL_SIZE=1 world unit wide/deep.
+//   Grid spans world X/Z from -HALF to +HALF (-12 to +12).
+//   Cell (col, row) occupies world X in [-HALF+col, -HALF+col+1].
+//   Cell CENTER in world X = -HALF + col + HALF_CELL = -HALF + col + 0.5.
+//   Equivalent: gridX = Math.floor(worldX), center = gridX + 0.5.
+//   gridX ranges -HALF to HALF-1 (i.e. -12 to 11), 24 distinct values.
+const GRID = 24          // total cells per axis
+const HALF = GRID / 2   // = 12, half-extent of the floor in world units
+const CELL_SIZE = 1      // each cell is 1×1 world units
+const HALF_CELL = CELL_SIZE / 2  // 0.5 — offset from cell edge to center
 const BOX_GEO = new THREE.BoxGeometry(1, 1, 1)
 const EDGES_GEO = new THREE.EdgesGeometry(BOX_GEO)
 
@@ -574,20 +583,43 @@ export default function Scene({ blocks, knockKey, onPlace, orbitRef, antiGravity
   )
 }
 
+// Snap a world coordinate to the grid cell index it falls in.
+// Returns the cell's gridCoord (range [-HALF, HALF-1]) and the snapped world center.
+// Formula: gridCoord = floor(worldCoord / CELL_SIZE) = floor(worldCoord)
+//          snappedWorld = gridCoord + HALF_CELL = gridCoord + 0.5
+// The half-open interval [gridCoord, gridCoord+1) maps onto the cell; its CENTER is at gridCoord+0.5.
+function snapToGrid(worldCoord) {
+  const gridCoord = Math.floor(worldCoord / CELL_SIZE)  // = Math.floor(worldCoord) since CELL_SIZE=1
+  return { gridCoord, snapped: gridCoord + HALF_CELL }
+}
+
+// Check both axes in one call; returns null if out of bounds.
+function resolveCell(worldX, worldZ) {
+  const { gridCoord: gx } = snapToGrid(worldX)
+  const { gridCoord: gz } = snapToGrid(worldZ)
+  if (gx >= -HALF && gx < HALF && gz >= -HALF && gz < HALF) return { gx, gz }
+  return null
+}
+
 function Floor({ onPlace, antiGravity, placeHeight, color, isRandom, ghostGrid, setGhostGrid, isPhotoMode }) {
   const tapPoint = useRef(null)
+  // Ref to the debug cell-highlight mesh — updated directly in pointer handlers to avoid re-renders
+  const hoverHighlightRef = useRef(null)
 
   const handlers = useTap(() => {
     if (!tapPoint.current || isPhotoMode) return
     const rawX = tapPoint.current.x
     const rawZ = tapPoint.current.z
-    const rawY = tapPoint.current.y
-    // Cell index = Math.floor(world_coord). Block center = index + 0.5.
-    // Valid range: [-HALF, HALF-1] for both axes (24 cells each direction).
-    const gx = Math.floor(rawX)
-    const gz = Math.floor(rawZ)
-    const valid = gx >= -HALF && gx < HALF && gz >= -HALF && gz < HALF
-    if (valid) onPlace(gx, gz)
+    const cell = resolveCell(rawX, rawZ)
+    // [BB Tap] lines are temporary debug output — remove once placement is confirmed correct
+    console.log('[BB Tap]', JSON.stringify({
+      rawX: +rawX.toFixed(4), rawZ: +rawZ.toFixed(4),
+      gx: cell?.gx ?? 'OOB', gz: cell?.gz ?? 'OOB',
+      blockX: cell ? cell.gx + HALF_CELL : null,
+      blockZ: cell ? cell.gz + HALF_CELL : null,
+      valid: !!cell,
+    }))
+    if (cell) onPlace(cell.gx, cell.gz)
     tapPoint.current = null
   })
 
@@ -602,17 +634,31 @@ function Floor({ onPlace, antiGravity, placeHeight, color, isRandom, ghostGrid, 
           onPointerLeave={e => {
             handlers.onPointerLeave(e)
             setGhostGrid(null)
+            if (hoverHighlightRef.current) hoverHighlightRef.current.visible = false
           }}
           onPointerCancel={e => {
             handlers.onPointerCancel(e)
             setGhostGrid(null)
+            if (hoverHighlightRef.current) hoverHighlightRef.current.visible = false
           }}
           onPointerMove={e => {
-            if (!antiGravity) { if (ghostGrid) setGhostGrid(null); return }
-            const gx = Math.floor(e.point.x)
-            const gz = Math.floor(e.point.z)
-            // Same half-open range check as placement: accept all 24 columns/rows
-            if (gx >= -HALF && gx < HALF && gz >= -HALF && gz < HALF) setGhostGrid({ x: gx, z: gz })
+            const cell = resolveCell(e.point.x, e.point.z)
+            // Debug: move highlight to snapped cell center (no React re-render)
+            if (hoverHighlightRef.current) {
+              if (cell) {
+                hoverHighlightRef.current.position.set(cell.gx + HALF_CELL, 0.022, cell.gz + HALF_CELL)
+                hoverHighlightRef.current.visible = true
+              } else {
+                hoverHighlightRef.current.visible = false
+              }
+            }
+            // Anti-gravity ghost preview
+            if (antiGravity && !isRandom) {
+              if (cell) setGhostGrid({ x: cell.gx, z: cell.gz })
+              else setGhostGrid(null)
+            } else if (ghostGrid) {
+              setGhostGrid(null)
+            }
           }}
         >
           <boxGeometry args={[GRID, 0.2, GRID]} />
@@ -629,6 +675,13 @@ function Floor({ onPlace, antiGravity, placeHeight, color, isRandom, ghostGrid, 
         {/* Major 4-unit grid — slightly brighter for orientation */}
         <gridHelper args={[GRID, 6, '#18304e', '#18304e']} position={[0, 0.013, 0]} />
       </RigidBody>
+
+      {/* DEBUG: cell-hover highlight — shows exactly which grid cell the pointer is over.
+          Remove this mesh once placement correctness is confirmed. */}
+      <mesh ref={hoverHighlightRef} rotation={[-Math.PI / 2, 0, 0]} visible={false} raycast={() => null}>
+        <planeGeometry args={[0.90, 0.90]} />
+        <meshBasicMaterial color="#00ccff" transparent opacity={0.35} depthWrite={false} />
+      </mesh>
 
       {/* Glowing platform rim — defines edge, preserves "physical surface" feel */}
       <lineSegments geometry={FLOOR_RIM_GEO} position={[0, 0.014, 0]}>

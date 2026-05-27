@@ -393,7 +393,7 @@ export default function App() {
 
       <Canvas
         shadows="soft"
-        camera={{ position: [8, 8, 24], fov: 50, near: 0.1, far: 200 }}
+        camera={{ position: [0, 12, 42], fov: 75, near: 0.1, far: 200 }}
         gl={{ antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: true }}
         style={{ background: 'linear-gradient(180deg, #020610 0%, #050c1c 28%, #071228 58%, #050c1c 84%, #020407 100%)', touchAction: 'none' }}
         onCreated={({ gl }) => { gl.domElement.style.touchAction = 'none'; glRef.current = gl }}
@@ -443,7 +443,7 @@ export default function App() {
           ref={orbitRef}
           enablePan={true}
           minDistance={4}
-          maxDistance={30}
+          maxDistance={60}
           maxPolarAngle={Math.PI / 2 - 0.05}
           makeDefault
         />
