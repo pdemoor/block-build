@@ -6,12 +6,12 @@ import Scene from './Scene'
 import { sound, playPlace, playKnock, playTap, playFloatOn, playFloatOff, playSave, playLoad } from './sounds'
 
 const PALETTE = [
-  '#e74c3c', '#e67e22', '#FFE600', '#2ecc71',   // 0-3  red, orange, neon-yellow, green
-  '#3498db', '#9b59b6', '#1abc9c', '#FF2DAA',   // 4-7  blue, purple, aqua, arcade-pink
-  '#ecf0f1', 'spaghetti', '#34495e', 'rainbow',  // 8-11 white, spaghetti, slate, rainbow
-  '#D4AF37', '#C0C0C0', '#FF2A2A', '#FFB6D9',   // 12-15 gold, silver, bright-red, light-pink
-  '#8B5A2B', 'glitter',                           // 16-17 brown, glitter
-  '#7CFF00', '#7DF9FF', '#111111',               // 18-20 lime, ice-cyan, deep-black (NEW)
+  '#e74c3c', '#FFE600', '#2ecc71',              // 0-2  red, neon-yellow, green
+  '#3498db', '#9b59b6', '#1abc9c', '#FF2DAA',   // 3-6  blue, purple, aqua, arcade-pink
+  '#ecf0f1', 'spaghetti', 'rainbow',             // 7-9  white, spaghetti, rainbow
+  '#D4AF37', '#C0C0C0', '#FF2A2A', '#FFB6D9',   // 10-13 gold, silver, bright-red, light-pink
+  '#8B5A2B', 'glitter',                          // 14-15 brown, glitter
+  '#7CFF00', '#7DF9FF', '#111111',               // 16-18 lime, ice-cyan, deep-black
 ]
 const LS_KEY = 'blockbuild_saves'
 const LS_AUTOSAVE = 'blockbuild_autosave'
