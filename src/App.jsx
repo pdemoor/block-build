@@ -211,6 +211,10 @@ export default function App() {
     setKnockKey(k => k + 1)
   }, [])
 
+  const flickBlock = useCallback(() => {
+    pushHistory(blocksRef.current, 'knock')
+  }, [])
+
   const undo = useCallback(() => {
     const h = historyRef.current
     if (!h.length) return
@@ -436,6 +440,7 @@ export default function App() {
             color={color}
             isRandom={isRandom}
             onFreeBlock={freeBlock}
+            onFlick={flickBlock}
             isPhotoMode={isPhotoMode}
           />
         </Physics>

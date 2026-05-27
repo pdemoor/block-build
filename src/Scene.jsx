@@ -390,7 +390,7 @@ function applySwipeImpulse(camera, body, swipeDx, swipeDyUp) {
   )
 }
 
-function SwipeHandler({ swipeRef, orbitRef, onFreeBlock }) {
+function SwipeHandler({ swipeRef, orbitRef, onFreeBlock, onFlick }) {
   const { gl, camera } = useThree()
 
   useEffect(() => {
@@ -409,6 +409,8 @@ function SwipeHandler({ swipeRef, orbitRef, onFreeBlock }) {
       const isSwipeUp = swipeDyUp > 30 && Math.abs(swipeDyUp) > Math.abs(dx) * 0.6 && dt < 700
 
       if (isSwipeUp && sw.rb.current) {
+        // Save undo snapshot before the impulse changes physics state
+        onFlick?.()
         if (sw.isFixed) {
           sw.rb.current.setBodyType(0, true)
           onFreeBlock(sw.blockId)
@@ -751,7 +753,7 @@ function TrailSystem() {
   return <points geometry={geo} material={mat} />
 }
 
-export default function Scene({ blocks, knockKey, onPlace, orbitRef, antiGravity, placeHeight, color, isRandom, onFreeBlock, isPhotoMode }) {
+export default function Scene({ blocks, knockKey, onPlace, orbitRef, antiGravity, placeHeight, color, isRandom, onFreeBlock, onFlick, isPhotoMode }) {
   const swipeRef = useRef(null)
   const [ghostGrid, setGhostGrid] = useState(null) // {x, z} or null
 
@@ -766,7 +768,7 @@ export default function Scene({ blocks, knockKey, onPlace, orbitRef, antiGravity
       <Shockwave knockKey={knockKey} />
       <KnockParticles knockKey={knockKey} />
       <PlacementHandler onPlace={onPlace} isPhotoMode={isPhotoMode} />
-      <SwipeHandler swipeRef={swipeRef} orbitRef={orbitRef} onFreeBlock={onFreeBlock} />
+      <SwipeHandler swipeRef={swipeRef} orbitRef={orbitRef} onFreeBlock={onFreeBlock} onFlick={onFlick} />
       <Floor
         antiGravity={antiGravity}
         placeHeight={placeHeight}
