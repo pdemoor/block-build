@@ -145,6 +145,9 @@ export default function App() {
   const historyRef = useRef([])
   const toastTimer = useRef(null)
   const glRef = useRef(null)
+  // Prevents duplicate placement when multiple event paths fire for one gesture (e.g.
+  // both a Block's onPointerUp and the Floor's tap handler resolving the same touch).
+  const lastPlaceTimeRef = useRef(0)
 
   useEffect(() => {
     if (!blocks.length) {
@@ -170,6 +173,12 @@ export default function App() {
   }
 
   const placeBlock = useCallback((gridX, gridZ) => {
+    // Guard: if two event paths (Block tap + Floor tap) fire within 80 ms for the
+    // same gesture, only the first call goes through. 80 ms is well below normal
+    // inter-tap speed (~150 ms+) so rapid stacking is unaffected.
+    const now = Date.now()
+    if (now - lastPlaceTimeRef.current < 80) return
+    lastPlaceTimeRef.current = now
     playPlace()
     pushHistory(blocksRef.current, 'place')
     const isAG = antiGravityRef.current
@@ -384,7 +393,7 @@ export default function App() {
 
       <Canvas
         shadows="soft"
-        camera={{ position: [8, 8, 12], fov: 50, near: 0.1, far: 200 }}
+        camera={{ position: [0, 12, 42], fov: 75, near: 0.1, far: 200 }}
         gl={{ antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: true }}
         style={{ background: 'linear-gradient(180deg, #020610 0%, #050c1c 28%, #071228 58%, #050c1c 84%, #020407 100%)', touchAction: 'none' }}
         onCreated={({ gl }) => { gl.domElement.style.touchAction = 'none'; glRef.current = gl }}
@@ -433,8 +442,10 @@ export default function App() {
         <OrbitControls
           ref={orbitRef}
           enablePan={true}
+          enableDamping={true}
+          dampingFactor={0.08}
           minDistance={4}
-          maxDistance={30}
+          maxDistance={60}
           maxPolarAngle={Math.PI / 2 - 0.05}
           makeDefault
         />

@@ -3,8 +3,17 @@ import { useThree, useFrame } from '@react-three/fiber'
 import { RigidBody, CuboidCollider } from '@react-three/rapier'
 import * as THREE from 'three'
 
-const GRID = 24
-const HALF = GRID / 2
+// Grid coordinate system:
+//   GRID = 24 cells, each cell is CELL_SIZE=1 world unit wide/deep.
+//   Grid spans world X/Z from -HALF to +HALF (-12 to +12).
+//   Cell (col, row) occupies world X in [-HALF+col, -HALF+col+1].
+//   Cell CENTER in world X = -HALF + col + HALF_CELL = -HALF + col + 0.5.
+//   Equivalent: gridX = Math.floor(worldX), center = gridX + 0.5.
+//   gridX ranges -HALF to HALF-1 (i.e. -12 to 11), 24 distinct values.
+const GRID = 24          // total cells per axis
+const HALF = GRID / 2   // = 12, half-extent of the floor in world units
+const CELL_SIZE = 1      // each cell is 1×1 world units
+const HALF_CELL = CELL_SIZE / 2  // 0.5 — offset from cell edge to center
 const BOX_GEO = new THREE.BoxGeometry(1, 1, 1)
 const EDGES_GEO = new THREE.EdgesGeometry(BOX_GEO)
 
@@ -78,68 +87,115 @@ const TRAIL_FRAG = `
   }
 `
 
-// Module-level spaghetti texture — drawn once, shared across all spaghetti cubes
+// Spaghetti bolognese texture — 512×512 canvas drawn once at module load.
+// Uses multi-segment cubic bezier curves so noodles loop, cross and tangle
+// in every direction instead of running in parallel lines.
 const SPAGHETTI_TEX = (() => {
-  const SIZE = 256
+  const S = 512
   const canvas = document.createElement('canvas')
-  canvas.width = SIZE; canvas.height = SIZE
+  canvas.width = S; canvas.height = S
   const ctx = canvas.getContext('2d')
 
-  // Tomato sauce base
-  ctx.fillStyle = '#9A2210'
-  ctx.fillRect(0, 0, SIZE, SIZE)
+  // Seeded LCG — identical output on every load
+  let _seed = 0xF00DFACE | 0
+  const rng = () => { _seed = (Math.imul(_seed, 1664525) + 1013904223) | 0; return (_seed >>> 0) / 0x100000000 }
+  const R  = (lo, hi) => lo + rng() * (hi - lo)
+  const RI = (lo, hi) => Math.floor(R(lo, hi))
 
-  // Sauce depth blobs
-  for (let i = 0; i < 9; i++) {
-    const bx = Math.sin(i * 1.618) * 88 + SIZE / 2
-    const by = Math.cos(i * 2.414) * 88 + SIZE / 2
-    const g = ctx.createRadialGradient(bx, by, 4, bx, by, 52)
-    g.addColorStop(0, 'rgba(50,8,4,0.32)')
+  // ── 1. SAUCE BASE ─────────────────────────────────────────────────────────
+  ctx.fillStyle = '#6A0E00'
+  ctx.fillRect(0, 0, S, S)
+
+  // Sauce variation: bright orange-red pools + dark shadow pockets
+  for (let i = 0; i < 22; i++) {
+    const x = R(0, S), y = R(0, S), rad = R(22, 100)
+    const g = ctx.createRadialGradient(x, y, 0, x, y, rad)
+    if (rng() > 0.35) {
+      g.addColorStop(0, `rgba(${200 + RI(0, 55)}, ${28 + RI(0, 32)}, ${RI(0, 14)}, 0.68)`)
+    } else {
+      g.addColorStop(0, 'rgba(12, 2, 0, 0.52)')
+    }
     g.addColorStop(1, 'rgba(0,0,0,0)')
-    ctx.fillStyle = g; ctx.fillRect(0, 0, SIZE, SIZE)
+    ctx.fillStyle = g; ctx.fillRect(0, 0, S, S)
   }
 
-  const N = 9
-  const bandH = SIZE / N
+  // ── 2. MEAT CHUNKS ────────────────────────────────────────────────────────
+  for (let i = 0; i < 42; i++) {
+    ctx.save()
+    ctx.translate(R(0, S), R(0, S))
+    ctx.rotate(R(0, Math.PI))
+    ctx.fillStyle = `hsl(${RI(12, 28)}, ${RI(38, 60)}%, ${RI(9, 22)}%)`
+    ctx.beginPath()
+    ctx.ellipse(0, 0, R(3, 14), R(2, 10), 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.restore()
+  }
 
-  for (let i = 0; i < N; i++) {
-    const yC = (i + 0.5) * bandH
-    const r = bandH * 0.41
-    const ph = i * 2.14 + 0.9
+  // ── 3. NOODLE STRAND HELPER ───────────────────────────────────────────────
+  // Multi-segment cubic bezier: control points extend 1.5× outside the canvas
+  // so strands loop back, form S-curves and cross each other organically.
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round'
 
-    const mkPath = () => {
-      ctx.beginPath()
-      for (let x = 0; x <= SIZE; x += 2) {
-        const w = Math.sin(x * 0.038 + ph) * 3.2 + Math.sin(x * 0.082 + ph * 1.6) * 1.6
-        if (x === 0) ctx.moveTo(x, yC - r + w)
-        else ctx.lineTo(x, yC - r + w)
-      }
-      for (let x = SIZE; x >= 0; x -= 2) {
-        const w = Math.sin(x * 0.038 + ph) * 3.2 + Math.sin(x * 0.082 + ph * 1.6) * 1.6
-        ctx.lineTo(x, yC + r + w)
-      }
-      ctx.closePath()
+  const drawNoodle = (thick) => {
+    const segs   = RI(2, 4)         // 2 or 3 bezier segments per noodle
+    const spread = S * 0.8          // max CP distance outside canvas
+
+    // Build flattened point list: [x0,y0, cp1x,cp1y, cp2x,cp2y, ex,ey, cp1x… ]
+    const xs = [R(0, S)], ys = [R(0, S)]
+    for (let s = 0; s < segs; s++) {
+      xs.push(R(-spread, S + spread), R(-spread, S + spread), R(0, S))
+      ys.push(R(-spread, S + spread), R(-spread, S + spread), R(0, S))
     }
 
-    // Noodle body — warm pasta hue varies per strand
-    const hue = 40 + (i % 3) * 5
-    const sat = 70 + (i % 2) * 9
-    const lit = 68 + (i % 4) * 4
-    mkPath(); ctx.fillStyle = `hsl(${hue},${sat}%,${lit}%)`; ctx.fill()
+    const hue = RI(36, 52), sat = RI(62, 82), lit = RI(56, 76)
 
-    // Bottom shadow — cylindrical depth
-    mkPath()
-    const sg = ctx.createLinearGradient(0, yC - r, 0, yC + r)
-    sg.addColorStop(0, 'rgba(0,0,0,0)'); sg.addColorStop(0.6, 'rgba(0,0,0,0)'); sg.addColorStop(1, 'rgba(0,0,0,0.32)')
-    ctx.fillStyle = sg; ctx.fill()
+    const stroke = (offY, lw, style) => {
+      ctx.beginPath()
+      ctx.moveTo(xs[0], ys[0] + offY)
+      for (let s = 0; s < segs; s++) {
+        const i = s * 3 + 1
+        ctx.bezierCurveTo(
+          xs[i],   ys[i]   + offY,
+          xs[i+1], ys[i+1] + offY,
+          xs[i+2], ys[i+2] + offY,
+        )
+      }
+      ctx.lineWidth = lw; ctx.strokeStyle = style; ctx.stroke()
+    }
 
-    // Top highlight — specular sheen
-    mkPath()
-    const hg = ctx.createLinearGradient(0, yC - r, 0, yC + r)
-    hg.addColorStop(0, `hsla(${hue},40%,96%,0.68)`)
-    hg.addColorStop(0.27, `hsla(${hue},50%,88%,0.18)`)
-    hg.addColorStop(0.5, 'rgba(255,255,255,0)')
-    ctx.fillStyle = hg; ctx.fill()
+    stroke(thick * 0.32,  thick,        'rgba(0,0,0,0.36)')
+    stroke(0,             thick,        `hsl(${hue},${sat}%,${lit}%)`)
+    stroke(-thick * 0.22, thick * 0.26, `hsla(48,40%,96%,0.65)`)
+  }
+
+  // ── 4. LOWER NOODLE LAYER ─────────────────────────────────────────────────
+  for (let i = 0; i < 26; i++) drawNoodle(R(8, 14))
+
+  // ── 5. SAUCE DRIPS (sandwiched between noodle layers) ─────────────────────
+  for (let i = 0; i < 16; i++) {
+    const x = R(8, S-8), y = R(8, S-8)
+    const rx = R(10, 32), ry = R(6, 22)
+    const g = ctx.createRadialGradient(x, y, 0, x, y, rx)
+    g.addColorStop(0,    `rgba(${200 + RI(0, 52)}, ${28 + RI(0, 28)}, 8, 0.86)`)
+    g.addColorStop(0.55, 'rgba(152, 18, 5, 0.44)')
+    g.addColorStop(1,    'rgba(0,0,0,0)')
+    ctx.save()
+    ctx.translate(x, y); ctx.rotate(R(0, Math.PI)); ctx.scale(1, ry / rx)
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, rx, 0, Math.PI * 2); ctx.fill()
+    ctx.restore()
+  }
+
+  // ── 6. UPPER NOODLE LAYER ─────────────────────────────────────────────────
+  for (let i = 0; i < 18; i++) drawNoodle(R(5, 10))
+
+  // ── 7. GLOSSY WET HIGHLIGHTS ──────────────────────────────────────────────
+  for (let i = 0; i < 10; i++) {
+    const x = R(12, S-12), y = R(12, S-12), rad = R(5, 22)
+    const g = ctx.createRadialGradient(x, y, 0, x, y, rad)
+    g.addColorStop(0,   'rgba(255, 218, 140, 0.42)')
+    g.addColorStop(0.5, 'rgba(255, 178, 58,  0.18)')
+    g.addColorStop(1,   'rgba(0,0,0,0)')
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill()
   }
 
   const tex = new THREE.CanvasTexture(canvas)
@@ -425,6 +481,124 @@ function CinematicDrift({ orbitRef }) {
   return null
 }
 
+// ── PLACEMENT HANDLER ─────────────────────────────────────────────────────────
+// Single, authoritative source for all block placement.
+// Uses canvas-level native events (not R3F per-mesh events) so existing block
+// meshes can never shadow or steal taps meant for empty floor cells.
+//
+// Algorithm:
+//   Pass 1 – cast ray against block meshes only (tagged userData.bbBlock).
+//             If the first hit has a world-space normal with y > 0.7 it's a
+//             top face → stack on that block using its live physics XZ.
+//   Pass 2 – intersect the mathematical Y=0 floor plane (blocks are ignored
+//             entirely).  Floor cells are always reachable regardless of how
+//             many blocks are settled nearby, rotated, or physically drifted.
+//
+// Grid formula (same as snapToGrid / resolveCell):
+//   gridCoord = Math.floor(worldCoord)          range [-12, 11]
+//   cellCenter = gridCoord + 0.5               range [-11.5, 11.5]
+function PlacementHandler({ onPlace, isPhotoMode }) {
+  const { gl, camera, scene } = useThree()
+  const rc      = useRef(new THREE.Raycaster())
+  const pd      = useRef(null)
+  const floorPl = useRef(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0))  // Y=0
+  const hitPt   = useRef(new THREE.Vector3())
+  const normMtx = useRef(new THREE.Matrix3())
+
+  // One-time sanity check: all 576 cells must map to distinct world centres.
+  useEffect(() => {
+    const seen = new Set()
+    let ok = true
+    for (let gx = -HALF; gx < HALF; gx++) {
+      for (let gz = -HALF; gz < HALF; gz++) {
+        const key = `${gx + HALF_CELL}_${gz + HALF_CELL}`
+        if (seen.has(key)) { console.error('[BB] Duplicate cell centre:', gx, gz); ok = false }
+        seen.add(key)
+      }
+    }
+    console.log(ok
+      ? `[BB] Grid OK — ${seen.size} unique cells (${GRID}×${GRID})`
+      : '[BB] Grid ERROR — fix coordinate mapping')
+  }, [])
+
+  useEffect(() => {
+    const canvas = gl.domElement
+
+    const onDown = (e) => {
+      if (!e.isPrimary) return
+      pd.current = { t: Date.now(), x: e.clientX, y: e.clientY }
+    }
+
+    const onUp = (e) => {
+      if (!e.isPrimary || !pd.current) return
+      const { t, x: x0, y: y0 } = pd.current
+      pd.current = null
+      if (isPhotoMode) return
+      const dx = e.clientX - x0, dy = e.clientY - y0
+      // Not a tap if it moved > 8px or took > 300 ms
+      if (Date.now() - t >= 300 || dx * dx + dy * dy >= 64) return
+
+      const rect = canvas.getBoundingClientRect()
+      const ndcX =  ((e.clientX - rect.left) / rect.width)  * 2 - 1
+      const ndcY = -((e.clientY - rect.top)  / rect.height) * 2 + 1
+
+      rc.current.setFromCamera({ x: ndcX, y: ndcY }, camera)
+
+      // ── Pass 1: block top-face (stacking) ────────────────────────────────
+      const bbObjs = []
+      scene.traverse(o => { if (o.userData?.bbBlock) bbObjs.push(o) })
+
+      for (const ix of rc.current.intersectObjects(bbObjs, false)) {
+        if (!ix.face) continue
+        normMtx.current.getNormalMatrix(ix.object.matrixWorld)
+        const wy = ix.face.normal.clone().applyMatrix3(normMtx.current).normalize().y
+        if (wy < 0.7) continue            // side or bottom face — skip
+        const rb = ix.object.userData.rb
+        if (!rb?.current) continue
+        const pos = rb.current.translation()
+        const cell = resolveCell(pos.x, pos.z)
+        if (!cell) continue
+        const wx = cell.gx + HALF_CELL, wz = cell.gz + HALF_CELL
+        const occ = bbObjs.length > 0
+        console.log('[BB Place] block-top',
+          `grid=(${cell.gx},${cell.gz})`, `world=(${wx},${wz})`,
+          `phys=(${+pos.x.toFixed(3)},${+pos.z.toFixed(3)})`,
+          `screen=(${e.clientX},${e.clientY})`, `occupied=${occ}`)
+        onPlace(cell.gx, cell.gz)
+        return
+      }
+
+      // ── Pass 2: floor plane (Y=0) ─────────────────────────────────────────
+      if (!rc.current.ray.intersectPlane(floorPl.current, hitPt.current)) return
+      const cell = resolveCell(hitPt.current.x, hitPt.current.z)
+      const wx = cell ? cell.gx + HALF_CELL : null
+      const wz = cell ? cell.gz + HALF_CELL : null
+      const occ = cell ? bbObjs.some(o => {
+        const rb = o.userData.rb
+        if (!rb?.current) return false
+        const p = rb.current.translation()
+        const c = resolveCell(p.x, p.z)
+        return c && c.gx === cell.gx && c.gz === cell.gz
+      }) : false
+      console.log('[BB Place] floor',
+        cell ? `grid=(${cell.gx},${cell.gz})` : 'OOB',
+        `hit=(${+hitPt.current.x.toFixed(3)},${+hitPt.current.z.toFixed(3)})`,
+        wx != null ? `world=(${wx},${wz})` : '',
+        `screen=(${e.clientX},${e.clientY})`, `occupied=${occ}`)
+      if (cell) onPlace(cell.gx, cell.gz)
+    }
+
+    canvas.addEventListener('pointerdown', onDown)
+    canvas.addEventListener('pointerup',   onUp)
+    return () => {
+      canvas.removeEventListener('pointerdown', onDown)
+      canvas.removeEventListener('pointerup',   onUp)
+    }
+  }, [gl, camera, scene, onPlace, isPhotoMode])
+
+  return null
+}
+
 function AmbientParticles() {
   const COUNT = 90
   const pointsRef = useRef(null)
@@ -546,9 +720,9 @@ export default function Scene({ blocks, knockKey, onPlace, orbitRef, antiGravity
       <TrailSystem />
       <Shockwave knockKey={knockKey} />
       <KnockParticles knockKey={knockKey} />
+      <PlacementHandler onPlace={onPlace} isPhotoMode={isPhotoMode} />
       <SwipeHandler swipeRef={swipeRef} orbitRef={orbitRef} onFreeBlock={onFreeBlock} />
       <Floor
-        onPlace={onPlace}
         antiGravity={antiGravity}
         placeHeight={placeHeight}
         color={color}
@@ -562,7 +736,6 @@ export default function Scene({ blocks, knockKey, onPlace, orbitRef, antiGravity
           key={block.id}
           block={block}
           knockKey={knockKey}
-          onPlace={onPlace}
           swipeRef={swipeRef}
           orbitRef={orbitRef}
           antiGravity={antiGravity}
@@ -574,17 +747,27 @@ export default function Scene({ blocks, knockKey, onPlace, orbitRef, antiGravity
   )
 }
 
-function Floor({ onPlace, antiGravity, placeHeight, color, isRandom, ghostGrid, setGhostGrid, isPhotoMode }) {
-  const tapPoint = useRef(null)
+// Snap a world coordinate to the grid cell index it falls in.
+// Returns the cell's gridCoord (range [-HALF, HALF-1]) and the snapped world center.
+// Formula: gridCoord = floor(worldCoord / CELL_SIZE) = floor(worldCoord)
+//          snappedWorld = gridCoord + HALF_CELL = gridCoord + 0.5
+// The half-open interval [gridCoord, gridCoord+1) maps onto the cell; its CENTER is at gridCoord+0.5.
+function snapToGrid(worldCoord) {
+  const gridCoord = Math.floor(worldCoord / CELL_SIZE)  // = Math.floor(worldCoord) since CELL_SIZE=1
+  return { gridCoord, snapped: gridCoord + HALF_CELL }
+}
 
-  const handlers = useTap(() => {
-    if (!tapPoint.current || isPhotoMode) return
-    // Math.floor gives the cell index; block world center = index + 0.5
-    const gx = Math.floor(tapPoint.current.x)
-    const gz = Math.floor(tapPoint.current.z)
-    if (Math.abs(gx) < HALF && Math.abs(gz) < HALF) onPlace(gx, gz)
-    tapPoint.current = null
-  })
+// Check both axes in one call; returns null if out of bounds.
+function resolveCell(worldX, worldZ) {
+  const { gridCoord: gx } = snapToGrid(worldX)
+  const { gridCoord: gz } = snapToGrid(worldZ)
+  if (gx >= -HALF && gx < HALF && gz >= -HALF && gz < HALF) return { gx, gz }
+  return null
+}
+
+// Floor renders visuals only. Placement is handled by PlacementHandler.
+function Floor({ antiGravity, placeHeight, color, isRandom, ghostGrid, setGhostGrid }) {
+  const hoverHighlightRef = useRef(null)
 
   return (
     <>
@@ -592,21 +775,30 @@ function Floor({ onPlace, antiGravity, placeHeight, color, isRandom, ghostGrid, 
         <mesh
           receiveShadow
           position={[0, -0.1, 0]}
-          onPointerDown={e => { tapPoint.current = e.point.clone(); handlers.onPointerDown(e) }}
-          onPointerUp={handlers.onPointerUp}
-          onPointerLeave={e => {
-            handlers.onPointerLeave(e)
-            setGhostGrid(null)
-          }}
-          onPointerCancel={e => {
-            handlers.onPointerCancel(e)
-            setGhostGrid(null)
-          }}
           onPointerMove={e => {
-            if (!antiGravity) { if (ghostGrid) setGhostGrid(null); return }
-            const gx = Math.floor(e.point.x)
-            const gz = Math.floor(e.point.z)
-            if (Math.abs(gx) < HALF && Math.abs(gz) < HALF) setGhostGrid({ x: gx, z: gz })
+            const cell = resolveCell(e.point.x, e.point.z)
+            if (hoverHighlightRef.current) {
+              if (cell) {
+                hoverHighlightRef.current.position.set(cell.gx + HALF_CELL, 0.022, cell.gz + HALF_CELL)
+                hoverHighlightRef.current.visible = true
+              } else {
+                hoverHighlightRef.current.visible = false
+              }
+            }
+            if (antiGravity && !isRandom) {
+              if (cell) setGhostGrid({ x: cell.gx, z: cell.gz })
+              else setGhostGrid(null)
+            } else if (ghostGrid) {
+              setGhostGrid(null)
+            }
+          }}
+          onPointerLeave={() => {
+            setGhostGrid(null)
+            if (hoverHighlightRef.current) hoverHighlightRef.current.visible = false
+          }}
+          onPointerCancel={() => {
+            setGhostGrid(null)
+            if (hoverHighlightRef.current) hoverHighlightRef.current.visible = false
           }}
         >
           <boxGeometry args={[GRID, 0.2, GRID]} />
@@ -623,6 +815,13 @@ function Floor({ onPlace, antiGravity, placeHeight, color, isRandom, ghostGrid, 
         {/* Major 4-unit grid — slightly brighter for orientation */}
         <gridHelper args={[GRID, 6, '#18304e', '#18304e']} position={[0, 0.013, 0]} />
       </RigidBody>
+
+      {/* DEBUG: cell-hover highlight — shows exactly which grid cell the pointer is over.
+          Remove this mesh once placement correctness is confirmed. */}
+      <mesh ref={hoverHighlightRef} rotation={[-Math.PI / 2, 0, 0]} visible={false} raycast={() => null}>
+        <planeGeometry args={[0.90, 0.90]} />
+        <meshBasicMaterial color="#00ccff" transparent opacity={0.35} depthWrite={false} />
+      </mesh>
 
       {/* Glowing platform rim — defines edge, preserves "physical surface" feel */}
       <lineSegments geometry={FLOOR_RIM_GEO} position={[0, 0.014, 0]}>
@@ -723,41 +922,45 @@ function JellyMaterial({ isFixed }) {
   )
 }
 
-// Spaghetti cube — glossy sauce sheen, animated noodle drift, inner sauce warmth
+// Spaghetti bolognese cube — glossy sauce sheen, tangled noodle texture, animated warmth
 function SpaghettiMaterial({ isFixed }) {
-  const matRef = useRef(null)
-  const sauceRef = useRef(null)
+  const matRef   = useRef(null)
+  const innerRef = useRef(null)
+  const meatRef  = useRef(null)
+
   useFrame(({ clock }) => {
     const t = clock.getElapsedTime()
-    // Noodles drift faster + more lateral sway
-    if (SPAGHETTI_TEX) {
-      SPAGHETTI_TEX.offset.y = (t * 0.028) % 1
-      SPAGHETTI_TEX.offset.x = Math.sin(t * 0.48) * 0.022
+    // Sauce shimmer only — no texture scrolling (scrolling made it look striped)
+    if (matRef.current) {
+      matRef.current.emissiveIntensity = (isFixed ? 0.15 : 0.07)
+        + Math.sin(t * 1.8) * 0.045 + Math.sin(t * 5.9) * 0.018
     }
-    if (!matRef.current) return
-    matRef.current.emissiveIntensity = (isFixed ? 0.11 : 0.03)
-      + Math.sin(t * 1.9) * 0.05 + Math.sin(t * 7.1) * 0.018
-    if (sauceRef.current) sauceRef.current.opacity = 0.16 + Math.abs(Math.sin(t * 1.7 + 0.8)) * 0.12
+    if (innerRef.current) {
+      innerRef.current.opacity = 0.22 + Math.abs(Math.sin(t * 1.5 + 0.7)) * 0.12
+    }
+    if (meatRef.current) {
+      meatRef.current.opacity = 0.10 + Math.sin(t * 2.2 + 1.1) * 0.03
+    }
   })
+
   return (
     <>
       <meshPhysicalMaterial
         ref={matRef}
         map={SPAGHETTI_TEX}
-        roughness={0.26}
+        roughness={0.44}
         metalness={0}
-        clearcoat={0.72}
-        clearcoatRoughness={0.42}
-        envMapIntensity={1.10}
-        emissive="#D46020"
-        emissiveIntensity={0.03}
-        iridescence={0.22}
-        iridescenceIOR={1.2}
-        iridescenceThicknessRange={[60, 220]}
+        clearcoat={0.88}
+        clearcoatRoughness={0.18}
+        envMapIntensity={1.25}
+        emissive="#CC2808"
+        emissiveIntensity={0.07}
       />
-      {/* Inner sauce shell — warm tomato backlight, pulses like simmering sauce */}
-      <mesh geometry={BOX_GEO} scale={0.76} raycast={() => null}>
-        <meshBasicMaterial ref={sauceRef} color="#ff4808" transparent opacity={0.16} depthWrite={false} side={THREE.BackSide} />
+      <mesh geometry={BOX_GEO} scale={0.72} raycast={() => null}>
+        <meshBasicMaterial ref={innerRef} color="#FF3808" transparent opacity={0.22} depthWrite={false} side={THREE.BackSide} />
+      </mesh>
+      <mesh geometry={BOX_GEO} scale={0.52} raycast={() => null}>
+        <meshBasicMaterial ref={meatRef} color="#8B3010" transparent opacity={0.10} depthWrite={false} side={THREE.BackSide} />
       </mesh>
     </>
   )
@@ -857,7 +1060,7 @@ function KnockParticles({ knockKey }) {
   )
 }
 
-function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, placeHeight, setGhostGrid }) {
+function Block({ block, knockKey, swipeRef, orbitRef, antiGravity, placeHeight, setGhostGrid }) {
   const rb = useRef(null)
   const prevKnock = useRef(knockKey)
   const pdLocal = useRef(null)
@@ -1074,32 +1277,61 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
 
   function handlePointerDown(e) {
     if (!e.isPrimary) return
-    e.stopPropagation()
+    // Do NOT stop propagation here — the floor mesh must also receive pointerDown
+    // so it records tapPoint. We stop propagation on pointerUp instead, after
+    // determining whether this is a tap or a swipe.
+    // Also do NOT disable OrbitControls here — horizontal drags must keep rotating
+    // the camera. We only disable orbit in handlePointerMove once a clear upward
+    // swipe is detected (to prevent camera tilt during block throws).
     const now = Date.now()
     pdLocal.current = { t: now, x: e.clientX, y: e.clientY }
-    if (orbitRef?.current) orbitRef.current.enabled = false
     swipeRef.current = { x0: e.clientX, y0: e.clientY, t0: now, rb, blockId: block.id, isFixed: block.isFixed }
   }
 
   function handlePointerMove(e) {
-    if (!antiGravity || !e.isPrimary) return
-    e.stopPropagation()
-    setGhostGrid({ x: block.gridX, z: block.gridZ })
+    if (!e.isPrimary) return
+
+    // Direction-aware orbit gating: disable orbit only when the gesture is clearly
+    // an upward swipe (block throw), not a horizontal drag (camera rotation).
+    const sw = swipeRef.current
+    if (sw && sw.blockId === block.id) {
+      const mdx = e.clientX - sw.x0
+      const mdy = sw.y0 - e.clientY   // positive = upward on screen
+      const dist = Math.sqrt(mdx * mdx + mdy * mdy)
+      if (dist > 12) {
+        // Upward swipe: more vertical than horizontal, positive upward component
+        if (mdy > 0 && mdy > Math.abs(mdx) * 0.7) {
+          if (orbitRef?.current) orbitRef.current.enabled = false
+        }
+        // Horizontal drag: orbit stays enabled (no-op — it was never disabled)
+      }
+    }
+
+    if (antiGravity) {
+      e.stopPropagation()
+      setGhostGrid({ x: block.gridX, z: block.gridZ })
+    }
   }
 
   function handlePointerUp(e) {
     if (!e.isPrimary) return
+    // Stop propagation unconditionally: we are the frontmost hit object, so
+    // the floor must not also fire its tap handler for the same gesture.
     e.stopPropagation()
     const loc = pdLocal.current
     pdLocal.current = null
+    // Re-enable orbit unconditionally — SwipeHandler also re-enables, but doing
+    // it here too ensures orbit recovers even if SwipeHandler's check short-circuits.
+    if (orbitRef?.current) orbitRef.current.enabled = true
     if (!loc) return
     const dx = e.clientX - loc.x
     const dy = e.clientY - loc.y
     const isTap = Date.now() - loc.t < 300 && dx * dx + dy * dy < 64
     if (isTap) {
       swipeRef.current = null
-      if (orbitRef?.current) orbitRef.current.enabled = true
-      onPlace(block.gridX, block.gridZ)
+      // Placement is handled by PlacementHandler via canvas-level pointer events.
+      // Block taps are consumed here only to prevent the swipe gesture from
+      // propagating; PlacementHandler's pointerup fires independently on the canvas.
     }
   }
 
@@ -1135,6 +1367,7 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
         castShadow
         receiveShadow
         geometry={BOX_GEO}
+        userData={{ bbBlock: true, rb }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
