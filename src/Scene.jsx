@@ -481,6 +481,124 @@ function CinematicDrift({ orbitRef }) {
   return null
 }
 
+// ── PLACEMENT HANDLER ─────────────────────────────────────────────────────────
+// Single, authoritative source for all block placement.
+// Uses canvas-level native events (not R3F per-mesh events) so existing block
+// meshes can never shadow or steal taps meant for empty floor cells.
+//
+// Algorithm:
+//   Pass 1 – cast ray against block meshes only (tagged userData.bbBlock).
+//             If the first hit has a world-space normal with y > 0.7 it's a
+//             top face → stack on that block using its live physics XZ.
+//   Pass 2 – intersect the mathematical Y=0 floor plane (blocks are ignored
+//             entirely).  Floor cells are always reachable regardless of how
+//             many blocks are settled nearby, rotated, or physically drifted.
+//
+// Grid formula (same as snapToGrid / resolveCell):
+//   gridCoord = Math.floor(worldCoord)          range [-12, 11]
+//   cellCenter = gridCoord + 0.5               range [-11.5, 11.5]
+function PlacementHandler({ onPlace, isPhotoMode }) {
+  const { gl, camera, scene } = useThree()
+  const rc      = useRef(new THREE.Raycaster())
+  const pd      = useRef(null)
+  const floorPl = useRef(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0))  // Y=0
+  const hitPt   = useRef(new THREE.Vector3())
+  const normMtx = useRef(new THREE.Matrix3())
+
+  // One-time sanity check: all 576 cells must map to distinct world centres.
+  useEffect(() => {
+    const seen = new Set()
+    let ok = true
+    for (let gx = -HALF; gx < HALF; gx++) {
+      for (let gz = -HALF; gz < HALF; gz++) {
+        const key = `${gx + HALF_CELL}_${gz + HALF_CELL}`
+        if (seen.has(key)) { console.error('[BB] Duplicate cell centre:', gx, gz); ok = false }
+        seen.add(key)
+      }
+    }
+    console.log(ok
+      ? `[BB] Grid OK — ${seen.size} unique cells (${GRID}×${GRID})`
+      : '[BB] Grid ERROR — fix coordinate mapping')
+  }, [])
+
+  useEffect(() => {
+    const canvas = gl.domElement
+
+    const onDown = (e) => {
+      if (!e.isPrimary) return
+      pd.current = { t: Date.now(), x: e.clientX, y: e.clientY }
+    }
+
+    const onUp = (e) => {
+      if (!e.isPrimary || !pd.current) return
+      const { t, x: x0, y: y0 } = pd.current
+      pd.current = null
+      if (isPhotoMode) return
+      const dx = e.clientX - x0, dy = e.clientY - y0
+      // Not a tap if it moved > 8px or took > 300 ms
+      if (Date.now() - t >= 300 || dx * dx + dy * dy >= 64) return
+
+      const rect = canvas.getBoundingClientRect()
+      const ndcX =  ((e.clientX - rect.left) / rect.width)  * 2 - 1
+      const ndcY = -((e.clientY - rect.top)  / rect.height) * 2 + 1
+
+      rc.current.setFromCamera({ x: ndcX, y: ndcY }, camera)
+
+      // ── Pass 1: block top-face (stacking) ────────────────────────────────
+      const bbObjs = []
+      scene.traverse(o => { if (o.userData?.bbBlock) bbObjs.push(o) })
+
+      for (const ix of rc.current.intersectObjects(bbObjs, false)) {
+        if (!ix.face) continue
+        normMtx.current.getNormalMatrix(ix.object.matrixWorld)
+        const wy = ix.face.normal.clone().applyMatrix3(normMtx.current).normalize().y
+        if (wy < 0.7) continue            // side or bottom face — skip
+        const rb = ix.object.userData.rb
+        if (!rb?.current) continue
+        const pos = rb.current.translation()
+        const cell = resolveCell(pos.x, pos.z)
+        if (!cell) continue
+        const wx = cell.gx + HALF_CELL, wz = cell.gz + HALF_CELL
+        const occ = bbObjs.length > 0
+        console.log('[BB Place] block-top',
+          `grid=(${cell.gx},${cell.gz})`, `world=(${wx},${wz})`,
+          `phys=(${+pos.x.toFixed(3)},${+pos.z.toFixed(3)})`,
+          `screen=(${e.clientX},${e.clientY})`, `occupied=${occ}`)
+        onPlace(cell.gx, cell.gz)
+        return
+      }
+
+      // ── Pass 2: floor plane (Y=0) ─────────────────────────────────────────
+      if (!rc.current.ray.intersectPlane(floorPl.current, hitPt.current)) return
+      const cell = resolveCell(hitPt.current.x, hitPt.current.z)
+      const wx = cell ? cell.gx + HALF_CELL : null
+      const wz = cell ? cell.gz + HALF_CELL : null
+      const occ = cell ? bbObjs.some(o => {
+        const rb = o.userData.rb
+        if (!rb?.current) return false
+        const p = rb.current.translation()
+        const c = resolveCell(p.x, p.z)
+        return c && c.gx === cell.gx && c.gz === cell.gz
+      }) : false
+      console.log('[BB Place] floor',
+        cell ? `grid=(${cell.gx},${cell.gz})` : 'OOB',
+        `hit=(${+hitPt.current.x.toFixed(3)},${+hitPt.current.z.toFixed(3)})`,
+        wx != null ? `world=(${wx},${wz})` : '',
+        `screen=(${e.clientX},${e.clientY})`, `occupied=${occ}`)
+      if (cell) onPlace(cell.gx, cell.gz)
+    }
+
+    canvas.addEventListener('pointerdown', onDown)
+    canvas.addEventListener('pointerup',   onUp)
+    return () => {
+      canvas.removeEventListener('pointerdown', onDown)
+      canvas.removeEventListener('pointerup',   onUp)
+    }
+  }, [gl, camera, scene, onPlace, isPhotoMode])
+
+  return null
+}
+
 function AmbientParticles() {
   const COUNT = 90
   const pointsRef = useRef(null)
@@ -602,9 +720,9 @@ export default function Scene({ blocks, knockKey, onPlace, orbitRef, antiGravity
       <TrailSystem />
       <Shockwave knockKey={knockKey} />
       <KnockParticles knockKey={knockKey} />
+      <PlacementHandler onPlace={onPlace} isPhotoMode={isPhotoMode} />
       <SwipeHandler swipeRef={swipeRef} orbitRef={orbitRef} onFreeBlock={onFreeBlock} />
       <Floor
-        onPlace={onPlace}
         antiGravity={antiGravity}
         placeHeight={placeHeight}
         color={color}
@@ -618,7 +736,6 @@ export default function Scene({ blocks, knockKey, onPlace, orbitRef, antiGravity
           key={block.id}
           block={block}
           knockKey={knockKey}
-          onPlace={onPlace}
           swipeRef={swipeRef}
           orbitRef={orbitRef}
           antiGravity={antiGravity}
@@ -648,27 +765,9 @@ function resolveCell(worldX, worldZ) {
   return null
 }
 
-function Floor({ onPlace, antiGravity, placeHeight, color, isRandom, ghostGrid, setGhostGrid, isPhotoMode }) {
-  const tapPoint = useRef(null)
-  // Ref to the debug cell-highlight mesh — updated directly in pointer handlers to avoid re-renders
+// Floor renders visuals only. Placement is handled by PlacementHandler.
+function Floor({ antiGravity, placeHeight, color, isRandom, ghostGrid, setGhostGrid }) {
   const hoverHighlightRef = useRef(null)
-
-  const handlers = useTap(() => {
-    if (!tapPoint.current || isPhotoMode) return
-    const rawX = tapPoint.current.x
-    const rawZ = tapPoint.current.z
-    const cell = resolveCell(rawX, rawZ)
-    // [BB Tap] lines are temporary debug output — remove once placement is confirmed correct
-    console.log('[BB Tap]', JSON.stringify({
-      rawX: +rawX.toFixed(4), rawZ: +rawZ.toFixed(4),
-      gx: cell?.gx ?? 'OOB', gz: cell?.gz ?? 'OOB',
-      blockX: cell ? cell.gx + HALF_CELL : null,
-      blockZ: cell ? cell.gz + HALF_CELL : null,
-      valid: !!cell,
-    }))
-    if (cell) onPlace(cell.gx, cell.gz)
-    tapPoint.current = null
-  })
 
   return (
     <>
@@ -676,21 +775,8 @@ function Floor({ onPlace, antiGravity, placeHeight, color, isRandom, ghostGrid, 
         <mesh
           receiveShadow
           position={[0, -0.1, 0]}
-          onPointerDown={e => { tapPoint.current = e.point.clone(); handlers.onPointerDown(e) }}
-          onPointerUp={handlers.onPointerUp}
-          onPointerLeave={e => {
-            handlers.onPointerLeave(e)
-            setGhostGrid(null)
-            if (hoverHighlightRef.current) hoverHighlightRef.current.visible = false
-          }}
-          onPointerCancel={e => {
-            handlers.onPointerCancel(e)
-            setGhostGrid(null)
-            if (hoverHighlightRef.current) hoverHighlightRef.current.visible = false
-          }}
           onPointerMove={e => {
             const cell = resolveCell(e.point.x, e.point.z)
-            // Debug: move highlight to snapped cell center (no React re-render)
             if (hoverHighlightRef.current) {
               if (cell) {
                 hoverHighlightRef.current.position.set(cell.gx + HALF_CELL, 0.022, cell.gz + HALF_CELL)
@@ -699,13 +785,20 @@ function Floor({ onPlace, antiGravity, placeHeight, color, isRandom, ghostGrid, 
                 hoverHighlightRef.current.visible = false
               }
             }
-            // Anti-gravity ghost preview
             if (antiGravity && !isRandom) {
               if (cell) setGhostGrid({ x: cell.gx, z: cell.gz })
               else setGhostGrid(null)
             } else if (ghostGrid) {
               setGhostGrid(null)
             }
+          }}
+          onPointerLeave={() => {
+            setGhostGrid(null)
+            if (hoverHighlightRef.current) hoverHighlightRef.current.visible = false
+          }}
+          onPointerCancel={() => {
+            setGhostGrid(null)
+            if (hoverHighlightRef.current) hoverHighlightRef.current.visible = false
           }}
         >
           <boxGeometry args={[GRID, 0.2, GRID]} />
@@ -967,7 +1060,7 @@ function KnockParticles({ knockKey }) {
   )
 }
 
-function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, placeHeight, setGhostGrid }) {
+function Block({ block, knockKey, swipeRef, orbitRef, antiGravity, placeHeight, setGhostGrid }) {
   const rb = useRef(null)
   const prevKnock = useRef(knockKey)
   const pdLocal = useRef(null)
@@ -1236,21 +1329,9 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
     const isTap = Date.now() - loc.t < 300 && dx * dx + dy * dy < 64
     if (isTap) {
       swipeRef.current = null
-      // Use the block's live physics position — block.gridX/gridZ is the
-      // initial spawn position and becomes wrong once blocks settle or drift.
-      if (rb.current) {
-        const pos = rb.current.translation()
-        const cell = resolveCell(pos.x, pos.z)
-        if (cell) {
-          console.log('[BB Block Tap]', JSON.stringify({
-            physX: +pos.x.toFixed(3), physZ: +pos.z.toFixed(3),
-            gx: cell.gx, gz: cell.gz, id: block.id,
-          }))
-          onPlace(cell.gx, cell.gz)
-        }
-      } else {
-        onPlace(block.gridX, block.gridZ)
-      }
+      // Placement is handled by PlacementHandler via canvas-level pointer events.
+      // Block taps are consumed here only to prevent the swipe gesture from
+      // propagating; PlacementHandler's pointerup fires independently on the canvas.
     }
   }
 
@@ -1286,6 +1367,7 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
         castShadow
         receiveShadow
         geometry={BOX_GEO}
+        userData={{ bbBlock: true, rb }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
