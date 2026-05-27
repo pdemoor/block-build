@@ -1196,7 +1196,9 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
 
   function handlePointerDown(e) {
     if (!e.isPrimary) return
-    e.stopPropagation()
+    // Do NOT stop propagation here — the floor mesh must also receive pointerDown
+    // so it records tapPoint. We stop propagation on pointerUp instead, after
+    // determining whether this is a tap or a swipe.
     const now = Date.now()
     pdLocal.current = { t: now, x: e.clientX, y: e.clientY }
     if (orbitRef?.current) orbitRef.current.enabled = false
@@ -1211,6 +1213,8 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
 
   function handlePointerUp(e) {
     if (!e.isPrimary) return
+    // Stop propagation unconditionally: we are the frontmost hit object, so
+    // the floor must not also fire its tap handler for the same gesture.
     e.stopPropagation()
     const loc = pdLocal.current
     pdLocal.current = null
@@ -1221,7 +1225,21 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
     if (isTap) {
       swipeRef.current = null
       if (orbitRef?.current) orbitRef.current.enabled = true
-      onPlace(block.gridX, block.gridZ)
+      // Use the block's live physics position — block.gridX/gridZ is the
+      // initial spawn position and becomes wrong once blocks settle or drift.
+      if (rb.current) {
+        const pos = rb.current.translation()
+        const cell = resolveCell(pos.x, pos.z)
+        if (cell) {
+          console.log('[BB Block Tap]', JSON.stringify({
+            physX: +pos.x.toFixed(3), physZ: +pos.z.toFixed(3),
+            gx: cell.gx, gz: cell.gz, id: block.id,
+          }))
+          onPlace(cell.gx, cell.gz)
+        }
+      } else {
+        onPlace(block.gridX, block.gridZ)
+      }
     }
   }
 
