@@ -1199,16 +1199,37 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
     // Do NOT stop propagation here — the floor mesh must also receive pointerDown
     // so it records tapPoint. We stop propagation on pointerUp instead, after
     // determining whether this is a tap or a swipe.
+    // Also do NOT disable OrbitControls here — horizontal drags must keep rotating
+    // the camera. We only disable orbit in handlePointerMove once a clear upward
+    // swipe is detected (to prevent camera tilt during block throws).
     const now = Date.now()
     pdLocal.current = { t: now, x: e.clientX, y: e.clientY }
-    if (orbitRef?.current) orbitRef.current.enabled = false
     swipeRef.current = { x0: e.clientX, y0: e.clientY, t0: now, rb, blockId: block.id, isFixed: block.isFixed }
   }
 
   function handlePointerMove(e) {
-    if (!antiGravity || !e.isPrimary) return
-    e.stopPropagation()
-    setGhostGrid({ x: block.gridX, z: block.gridZ })
+    if (!e.isPrimary) return
+
+    // Direction-aware orbit gating: disable orbit only when the gesture is clearly
+    // an upward swipe (block throw), not a horizontal drag (camera rotation).
+    const sw = swipeRef.current
+    if (sw && sw.blockId === block.id) {
+      const mdx = e.clientX - sw.x0
+      const mdy = sw.y0 - e.clientY   // positive = upward on screen
+      const dist = Math.sqrt(mdx * mdx + mdy * mdy)
+      if (dist > 12) {
+        // Upward swipe: more vertical than horizontal, positive upward component
+        if (mdy > 0 && mdy > Math.abs(mdx) * 0.7) {
+          if (orbitRef?.current) orbitRef.current.enabled = false
+        }
+        // Horizontal drag: orbit stays enabled (no-op — it was never disabled)
+      }
+    }
+
+    if (antiGravity) {
+      e.stopPropagation()
+      setGhostGrid({ x: block.gridX, z: block.gridZ })
+    }
   }
 
   function handlePointerUp(e) {
@@ -1218,13 +1239,15 @@ function Block({ block, knockKey, onPlace, swipeRef, orbitRef, antiGravity, plac
     e.stopPropagation()
     const loc = pdLocal.current
     pdLocal.current = null
+    // Re-enable orbit unconditionally — SwipeHandler also re-enables, but doing
+    // it here too ensures orbit recovers even if SwipeHandler's check short-circuits.
+    if (orbitRef?.current) orbitRef.current.enabled = true
     if (!loc) return
     const dx = e.clientX - loc.x
     const dy = e.clientY - loc.y
     const isTap = Date.now() - loc.t < 300 && dx * dx + dy * dy < 64
     if (isTap) {
       swipeRef.current = null
-      if (orbitRef?.current) orbitRef.current.enabled = true
       // Use the block's live physics position — block.gridX/gridZ is the
       // initial spawn position and becomes wrong once blocks settle or drift.
       if (rb.current) {

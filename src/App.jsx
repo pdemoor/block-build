@@ -442,6 +442,8 @@ export default function App() {
         <OrbitControls
           ref={orbitRef}
           enablePan={true}
+          enableDamping={true}
+          dampingFactor={0.08}
           minDistance={4}
           maxDistance={60}
           maxPolarAngle={Math.PI / 2 - 0.05}
