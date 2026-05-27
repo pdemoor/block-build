@@ -87,68 +87,116 @@ const TRAIL_FRAG = `
   }
 `
 
-// Module-level spaghetti texture — drawn once, shared across all spaghetti cubes
+// Spaghetti bolognese texture — drawn once at module load, shared across all spaghetti cubes.
+// Layered approach: sauce base → meat chunks → lower noodle strands → sauce drips → upper strands → gloss.
+// Strands go at random angles so all 6 cube faces read as tangled noodles, not horizontal stripes.
 const SPAGHETTI_TEX = (() => {
-  const SIZE = 256
+  const S = 256
   const canvas = document.createElement('canvas')
-  canvas.width = SIZE; canvas.height = SIZE
+  canvas.width = S; canvas.height = S
   const ctx = canvas.getContext('2d')
 
-  // Tomato sauce base
-  ctx.fillStyle = '#9A2210'
-  ctx.fillRect(0, 0, SIZE, SIZE)
+  // Seeded LCG so the texture is identical on every page load
+  let _seed = 0xBEEFCAFE | 0
+  const rng = () => { _seed = (Math.imul(_seed, 1664525) + 1013904223) | 0; return (_seed >>> 0) / 0x100000000 }
+  const R = (lo, hi) => lo + rng() * (hi - lo)
 
-  // Sauce depth blobs
-  for (let i = 0; i < 9; i++) {
-    const bx = Math.sin(i * 1.618) * 88 + SIZE / 2
-    const by = Math.cos(i * 2.414) * 88 + SIZE / 2
-    const g = ctx.createRadialGradient(bx, by, 4, bx, by, 52)
-    g.addColorStop(0, 'rgba(50,8,4,0.32)')
+  // ── 1. SAUCE BASE ──────────────────────────────────────────────
+  ctx.fillStyle = '#7A1205'
+  ctx.fillRect(0, 0, S, S)
+
+  // Sauce pools and shadow blobs — orange-red highlights, dark pockets
+  for (let i = 0; i < 18; i++) {
+    const x = R(0, S), y = R(0, S), rad = R(10, 42)
+    const g = ctx.createRadialGradient(x, y, 0, x, y, rad)
+    if (rng() > 0.42) {
+      g.addColorStop(0, `rgba(${200 + R(0, 45) | 0}, ${28 + R(0, 22) | 0}, 8, 0.58)`)  // bright orange-red sauce
+    } else {
+      g.addColorStop(0, 'rgba(28, 4, 2, 0.50)')  // dark sauce shadow pocket
+    }
     g.addColorStop(1, 'rgba(0,0,0,0)')
-    ctx.fillStyle = g; ctx.fillRect(0, 0, SIZE, SIZE)
+    ctx.fillStyle = g; ctx.fillRect(0, 0, S, S)
   }
 
-  const N = 9
-  const bandH = SIZE / N
+  // ── 2. MEAT CHUNKS ─────────────────────────────────────────────
+  // Small dark-brown ellipses scattered throughout the sauce
+  for (let i = 0; i < 28; i++) {
+    const x = R(0, S), y = R(0, S)
+    const rx = R(2.5, 7.5), ry = R(1.5, 5.5)
+    ctx.save(); ctx.translate(x, y); ctx.rotate(R(0, Math.PI))
+    ctx.fillStyle = `hsl(18, ${R(38, 58) | 0}%, ${R(11, 22) | 0}%)`
+    ctx.beginPath(); ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2); ctx.fill()
+    ctx.restore()
+  }
 
-  for (let i = 0; i < N; i++) {
-    const yC = (i + 0.5) * bandH
-    const r = bandH * 0.41
-    const ph = i * 2.14 + 0.9
+  // ── 3. NOODLE STRAND HELPER ────────────────────────────────────
+  // Each strand: dual-frequency sinusoidal curve drawn with shadow + body + specular highlight.
+  // offY shifts the path vertically to simulate cylindrical cross-section lighting.
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round'
 
-    const mkPath = () => {
+  const drawStrand = (sx, sy, angle, len, thick) => {
+    const hue = R(36, 52) | 0
+    const sat = R(64, 78) | 0
+    const lit = R(68, 82) | 0
+    const f1 = R(0.020, 0.055), a1 = R(4, 16)   // primary wave: wide, gentle
+    const f2 = R(0.055, 0.105), a2 = R(2, 7)    // secondary wave: tighter kink
+    const ph = R(0, Math.PI * 2)
+
+    const mkPath = (offX, offY) => {
       ctx.beginPath()
-      for (let x = 0; x <= SIZE; x += 2) {
-        const w = Math.sin(x * 0.038 + ph) * 3.2 + Math.sin(x * 0.082 + ph * 1.6) * 1.6
-        if (x === 0) ctx.moveTo(x, yC - r + w)
-        else ctx.lineTo(x, yC - r + w)
+      for (let d = 0; d <= len; d += 1.5) {
+        const perp = Math.sin(d * f1 + ph) * a1 + Math.sin(d * f2 + ph * 1.7) * a2
+        const px = sx + Math.cos(angle) * d - Math.sin(angle) * perp + offX
+        const py = sy + Math.sin(angle) * d + Math.cos(angle) * perp + offY
+        d < 1.5 ? ctx.moveTo(px, py) : ctx.lineTo(px, py)
       }
-      for (let x = SIZE; x >= 0; x -= 2) {
-        const w = Math.sin(x * 0.038 + ph) * 3.2 + Math.sin(x * 0.082 + ph * 1.6) * 1.6
-        ctx.lineTo(x, yC + r + w)
-      }
-      ctx.closePath()
     }
 
-    // Noodle body — warm pasta hue varies per strand
-    const hue = 40 + (i % 3) * 5
-    const sat = 70 + (i % 2) * 9
-    const lit = 68 + (i % 4) * 4
-    mkPath(); ctx.fillStyle = `hsl(${hue},${sat}%,${lit}%)`; ctx.fill()
+    // 3a. Bottom shadow — shifts path slightly down for cylindrical depth illusion
+    mkPath(0, thick * 0.30)
+    ctx.lineWidth = thick; ctx.strokeStyle = 'rgba(0,0,0,0.32)'; ctx.stroke()
 
-    // Bottom shadow — cylindrical depth
-    mkPath()
-    const sg = ctx.createLinearGradient(0, yC - r, 0, yC + r)
-    sg.addColorStop(0, 'rgba(0,0,0,0)'); sg.addColorStop(0.6, 'rgba(0,0,0,0)'); sg.addColorStop(1, 'rgba(0,0,0,0.32)')
-    ctx.fillStyle = sg; ctx.fill()
+    // 3b. Main pasta body
+    mkPath(0, 0)
+    ctx.lineWidth = thick; ctx.strokeStyle = `hsl(${hue},${sat}%,${lit}%)`; ctx.stroke()
 
-    // Top highlight — specular sheen
-    mkPath()
-    const hg = ctx.createLinearGradient(0, yC - r, 0, yC + r)
-    hg.addColorStop(0, `hsla(${hue},40%,96%,0.68)`)
-    hg.addColorStop(0.27, `hsla(${hue},50%,88%,0.18)`)
-    hg.addColorStop(0.5, 'rgba(255,255,255,0)')
-    ctx.fillStyle = hg; ctx.fill()
+    // 3c. Specular highlight — narrow bright stroke at the top of the cylinder
+    mkPath(0, -thick * 0.20)
+    ctx.lineWidth = thick * 0.26; ctx.strokeStyle = `hsla(46, 38%, 96%, 0.70)`; ctx.stroke()
+  }
+
+  // ── 4. LOWER STRAND LAYER (under sauce drips) ──────────────────
+  for (let i = 0; i < 14; i++) {
+    drawStrand(R(-S * 0.2, S * 1.2), R(-S * 0.2, S * 1.2),
+      R(0, Math.PI), R(S * 0.40, S * 0.88), R(5.5, 9.5))
+  }
+
+  // ── 5. SAUCE DRIPS on top of lower noodles ─────────────────────
+  for (let i = 0; i < 9; i++) {
+    const x = R(5, S - 5), y = R(5, S - 5), rx = R(5, 17), ry = R(3, 11)
+    const g = ctx.createRadialGradient(x, y, 0, x, y, rx)
+    g.addColorStop(0, `rgba(${195 + R(0, 50) | 0}, ${20 + R(0, 20) | 0}, 8, 0.84)`)
+    g.addColorStop(0.55, 'rgba(155,16,6,0.42)')
+    g.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.save(); ctx.translate(x, y); ctx.rotate(R(0, Math.PI)); ctx.scale(1, ry / rx)
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, rx, 0, Math.PI * 2); ctx.fill()
+    ctx.restore()
+  }
+
+  // ── 6. UPPER STRAND LAYER (on top of sauce drips) ──────────────
+  for (let i = 0; i < 10; i++) {
+    drawStrand(R(-S * 0.15, S * 1.15), R(-S * 0.15, S * 1.15),
+      R(0, Math.PI), R(S * 0.25, S * 0.65), R(4.0, 8.0))
+  }
+
+  // ── 7. WARM GLOSS HIGHLIGHTS ───────────────────────────────────
+  // Suggest wet glossy sauce on top of everything
+  for (let i = 0; i < 5; i++) {
+    const x = R(8, S - 8), y = R(8, S - 8), rad = R(4, 14)
+    const g = ctx.createRadialGradient(x, y, 0, x, y, rad)
+    g.addColorStop(0, 'rgba(255, 205, 130, 0.32)')
+    g.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill()
   }
 
   const tex = new THREE.CanvasTexture(canvas)
@@ -782,41 +830,56 @@ function JellyMaterial({ isFixed }) {
   )
 }
 
-// Spaghetti cube — glossy sauce sheen, animated noodle drift, inner sauce warmth
+// Spaghetti bolognese cube — glossy sauce sheen, tangled noodle texture, animated warmth
 function SpaghettiMaterial({ isFixed }) {
   const matRef = useRef(null)
-  const sauceRef = useRef(null)
+  const innerRef = useRef(null)  // inner sauce glow (back-face shell)
+  const meatRef = useRef(null)   // meat warmth (closer inner shell)
+
   useFrame(({ clock }) => {
     const t = clock.getElapsedTime()
-    // Noodles drift faster + more lateral sway
+
+    // Gentle noodle drift — slow scroll + subtle lateral sway
     if (SPAGHETTI_TEX) {
-      SPAGHETTI_TEX.offset.y = (t * 0.028) % 1
-      SPAGHETTI_TEX.offset.x = Math.sin(t * 0.48) * 0.022
+      SPAGHETTI_TEX.offset.y = (t * 0.018) % 1
+      SPAGHETTI_TEX.offset.x = Math.sin(t * 0.32) * 0.015 + Math.sin(t * 0.71) * 0.007
     }
-    if (!matRef.current) return
-    matRef.current.emissiveIntensity = (isFixed ? 0.11 : 0.03)
-      + Math.sin(t * 1.9) * 0.05 + Math.sin(t * 7.1) * 0.018
-    if (sauceRef.current) sauceRef.current.opacity = 0.16 + Math.abs(Math.sin(t * 1.7 + 0.8)) * 0.12
+
+    if (matRef.current) {
+      // Sauce sheen pulses — simulates simmering light catch
+      matRef.current.emissiveIntensity = (isFixed ? 0.14 : 0.05)
+        + Math.sin(t * 1.8) * 0.04 + Math.sin(t * 6.4) * 0.015
+    }
+    // Inner tomato-red backglow — simmers like hot sauce
+    if (innerRef.current) {
+      innerRef.current.opacity = 0.20 + Math.abs(Math.sin(t * 1.5 + 0.7)) * 0.13
+    }
+    // Meat warmth — very subtle dark-brown depth pulse
+    if (meatRef.current) {
+      meatRef.current.opacity = 0.09 + Math.sin(t * 2.2 + 1.1) * 0.03
+    }
   })
+
   return (
     <>
       <meshPhysicalMaterial
         ref={matRef}
         map={SPAGHETTI_TEX}
-        roughness={0.26}
+        roughness={0.16}           // low roughness = wet sauce gloss
         metalness={0}
-        clearcoat={0.72}
-        clearcoatRoughness={0.42}
-        envMapIntensity={1.10}
-        emissive="#D46020"
-        emissiveIntensity={0.03}
-        iridescence={0.22}
-        iridescenceIOR={1.2}
-        iridescenceThicknessRange={[60, 220]}
+        clearcoat={0.90}           // strong clearcoat for gooey sheen
+        clearcoatRoughness={0.24}  // fairly smooth sauce surface
+        envMapIntensity={1.30}
+        emissive="#CC2808"         // deep tomato-red warmth
+        emissiveIntensity={0.05}
       />
-      {/* Inner sauce shell — warm tomato backlight, pulses like simmering sauce */}
-      <mesh geometry={BOX_GEO} scale={0.76} raycast={() => null}>
-        <meshBasicMaterial ref={sauceRef} color="#ff4808" transparent opacity={0.16} depthWrite={false} side={THREE.BackSide} />
+      {/* Inner sauce glow — tomato-red backlight through translucent noodles */}
+      <mesh geometry={BOX_GEO} scale={0.72} raycast={() => null}>
+        <meshBasicMaterial ref={innerRef} color="#FF3808" transparent opacity={0.20} depthWrite={false} side={THREE.BackSide} />
+      </mesh>
+      {/* Meat warmth shell — very close inner dark-brown depth cue */}
+      <mesh geometry={BOX_GEO} scale={0.52} raycast={() => null}>
+        <meshBasicMaterial ref={meatRef} color="#8B3010" transparent opacity={0.09} depthWrite={false} side={THREE.BackSide} />
       </mesh>
     </>
   )
